@@ -171,11 +171,9 @@ devices:
 
         - name: 'Remaining CO2'
           keypath: 'details.data_latest.measurement.remaining_co2'
-          device_class: 'Battery'
           unit: 'Percentage'
         - name: 'Remaining Filter'
           keypath: 'details.data_latest.measurement.remaining_filter'
-          device_class: 'Battery'
           unit: 'Percentage'
 
         - name: 'Remaining CO2 total'
@@ -279,11 +277,9 @@ devices:
 
         - name: 'Remaining CO2'
           keypath: 'details.data_latest.measurement.remaining_co2'
-          device_class: 'Battery'
           unit: 'Percentage'
         - name: 'Remaining Filter'
           keypath: 'details.data_latest.measurement.remaining_filter'
-          device_class: 'Battery'
           unit: 'Percentage'
 
         - name: 'Remaining CO2 total'
