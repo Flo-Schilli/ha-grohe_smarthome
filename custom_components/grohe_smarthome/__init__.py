@@ -10,7 +10,7 @@ from voluptuous import All, Length
 from grohe import GroheClient, GroheGroupBy, GroheTypes, GroheTapType
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, HomeAssistantError
 from homeassistant.helpers import device_registry, httpx_client
 from custom_components.grohe_smarthome.const import DOMAIN, CONF_USERNAME, CONF_PASSWORD, CONF_PLATFORM
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
@@ -105,8 +105,10 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     ####### SERVICES ###################################################################################################
     async def handle_dashboard_export(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Export data for params: %s', call.data)
-        return await api.get_dashboard()
-
+        try:
+            return await api.get_dashboard()
+        except Exception as e:
+            raise HomeAssistantError(str(e))
 
     async def handle_get_appliance_data(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Get data for params: %s', call.data)
@@ -116,49 +118,57 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         date_to_in = call.data.get('date_to') if call.data.get('date_to') else None
 
         if device:
-            if group_by_str is None:
-                group_by = GroheGroupBy.DAY if device.type == GroheTypes.GROHE_SENSE else GroheGroupBy.HOUR
-            else:
-                group_by = GroheGroupBy(group_by_str)
+            try:
+                if group_by_str is None:
+                    group_by = GroheGroupBy.DAY if device.type == GroheTypes.GROHE_SENSE else GroheGroupBy.HOUR
+                else:
+                    group_by = GroheGroupBy(group_by_str)
 
-            if date_from_in is None:
-                date_from = datetime.now().astimezone() - timedelta(hours=1)
-            else:
-                date_from = datetime.strptime(date_from_in, "%Y-%m-%d")
+                if date_from_in is None:
+                    date_from = datetime.now().astimezone() - timedelta(hours=1)
+                else:
+                    date_from = datetime.strptime(date_from_in, "%Y-%m-%d")
 
-            if date_to_in is None:
-                date_to = datetime.now().astimezone()
-            else:
-                date_to = datetime.strptime(date_to_in, "%Y-%m-%d")
+                if date_to_in is None:
+                    date_to = datetime.now().astimezone()
+                else:
+                    date_to = datetime.strptime(date_to_in, "%Y-%m-%d")
 
-            return await api.get_appliance_data(device.location_id, device.room_id, device.appliance_id,
-                                                date_from,
-                                                date_to, group_by, False)
+                return await api.get_appliance_data(device.location_id, device.room_id, device.appliance_id,
+                                                    date_from,
+                                                    date_to, group_by, False)
+            except Exception as e:
+                raise HomeAssistantError(str(e))
         else:
-            return {}
+            raise HomeAssistantError('Device not found')
 
     async def handle_get_appliance_details(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Get details for params: %s', call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
-            return await api.get_appliance_details(device.location_id, device.room_id, device.appliance_id)
-
+            try:
+                return await api.get_appliance_details(device.location_id, device.room_id, device.appliance_id)
+            except Exception as e:
+                raise HomeAssistantError(str(e))
         else:
-            return {}
+            raise HomeAssistantError('Device not found')
 
     async def handle_get_appliance_command(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Get possible commands for params: %s', call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
-            data = await api.get_appliance_command(device.location_id, device.room_id, device.appliance_id)
-            if data is None:
-                return {}
-            else:
-                return data
+            try:
+                data = await api.get_appliance_command(device.location_id, device.room_id, device.appliance_id)
+                if data is None:
+                    return {}
+                else:
+                    return data
+            except Exception as e:
+                raise HomeAssistantError(str(e))
         else:
-            return {}
+            raise HomeAssistantError('Device not found')
 
     async def handle_set_appliance_command(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Set commands for params: %s', call.data)
@@ -167,13 +177,16 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
 
         data_to_send = {'command': commands}
         if device:
-            data = await api.set_appliance_command(device.location_id, device.room_id, device.appliance_id, device.type, data_to_send)
-            if data is None:
-                return {}
-            else:
-                return data
+            try:
+                data = await api.set_appliance_command(device.location_id, device.room_id, device.appliance_id, device.type, data_to_send)
+                if data is None:
+                    return {}
+                else:
+                    return data
+            except Exception as e:
+                raise HomeAssistantError(str(e))
         else:
-            return {}
+            raise HomeAssistantError('Device not found')
 
     async def handle_tap_water(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Tap water for params: %s', call.data)
@@ -191,33 +204,79 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
                     return {}
                 else:
                     return data
-            except KeyError as e:
-                return {'error': f'The following error happened: {e}'}
+            except Exception as e:
+                raise HomeAssistantError(str(e))
         else:
-            return {'error': 'Device is not a Grohe Blue device'}
+            raise HomeAssistantError("Device does not exist or device is not a Grohe Blue Home or Grohe Blue Professional device")
 
     async def handle_get_appliance_status(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Get status for params: %s', call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
-            data = await api.get_appliance_status(device.location_id, device.room_id, device.appliance_id)
-            if data is None:
-                return {}
-            elif isinstance(data, list) and len(data) > 0:
-                return { 'status': data }
-            else:
-                return data
-
+            try:
+                data = await api.get_appliance_status(device.location_id, device.room_id, device.appliance_id)
+                if data is None:
+                    return {}
+                elif isinstance(data, list) and len(data) > 0:
+                    return { 'status': data }
+                else:
+                    return data
+            except Exception as e:
+                raise HomeAssistantError(str(e))
         else:
-            return {}
+            raise HomeAssistantError('Device not found')
 
     async def handle_get_appliance_notifications(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Get notifications for params: %s', call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
-            data = await api.get_appliance_notifications(device.location_id, device.room_id, device.appliance_id)
+            try:
+                data = await api.get_appliance_notifications(device.location_id, device.room_id, device.appliance_id)
+
+                if data is None:
+                    return {}
+                elif isinstance(data, list) and len(data) > 0:
+                    return {
+                        'notifications': [dict(notification) for notification in data]
+                    }
+                else:
+                    return {}
+            except Exception as e:
+                raise HomeAssistantError(str(e))
+        else:
+            raise HomeAssistantError('Device not found')
+
+    async def handle_get_appliance_pressure_measurement(call: ServiceCall) -> ServiceResponse:
+        _LOGGER.debug('Get pressure measurement for params: %s', call.data)
+        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+
+        if device:
+            try:
+                data = await api.get_appliance_pressure_measurement(device.location_id, device.room_id, device.appliance_id)
+
+                if data is None:
+                    return {}
+                elif isinstance(data, list) and len(data) > 0:
+                    return {
+                        'pressure_measurements': [dict(measurement) for measurement in data]
+                    }
+                else:
+                    return data
+            except Exception as e:
+                raise HomeAssistantError(str(e))
+        else:
+            raise HomeAssistantError('Device not found')
+
+    async def handle_get_profile_notifications(call: ServiceCall) -> ServiceResponse:
+        _LOGGER.debug('Get profile notifications for params: %s', call.data)
+        limit = call.data.get('limit')
+        if limit is None:
+            limit = 50
+
+        try:
+            data = await api.get_profile_notifications(limit)
 
             if data is None:
                 return {}
@@ -226,46 +285,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
                     'notifications': [dict(notification) for notification in data]
                 }
             else:
-                return {}
-
-        else:
-            return {}
-
-    async def handle_get_appliance_pressure_measurement(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get pressure measurement for params: %s', call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
-
-        if device:
-            data = await api.get_appliance_pressure_measurement(device.location_id, device.room_id, device.appliance_id)
-
-            if data is None:
-                return {}
-            elif isinstance(data, list) and len(data) > 0:
-                return {
-                    'pressure_measurements': [dict(measurement) for measurement in data]
-                }
-            else:
                 return data
-
-        else:
-            return {}
-
-    async def handle_get_profile_notifications(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get profile notifications for params: %s', call.data)
-        limit = call.data.get('limit')
-        if limit is None:
-            limit = 50
-
-        data = await api.get_profile_notifications(limit)
-
-        if data is None:
-            return {}
-        elif isinstance(data, list) and len(data) > 0:
-            return {
-                'notifications': [dict(notification) for notification in data]
-            }
-        else:
-            return data
+        except Exception as e:
+            raise HomeAssistantError(str(e))
 
     async def handle_set_snooze(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Set snooze for params: %s', call.data)
@@ -279,11 +301,10 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
                     return {}
                 else:
                     return data
-            except KeyError as e:
-                return {'error': f'The following error happened: {e}'}
+            except Exception as e:
+                raise HomeAssistantError(str(e))
         else:
-            return {'error': 'Device is not a Grohe Sense Guard device'}
-
+            raise HomeAssistantError('Device does not exist or device is not a Grohe Sense Guard device')
 
     async def handle_disable_snooze(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug('Disable snooze for params: %s', call.data)
@@ -296,10 +317,10 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
                     return {}
                 else:
                     return data
-            except KeyError as e:
-                return {'error': f'The following error happened: {e}'}
+            except Exception as e:
+                raise HomeAssistantError(str(e))
         else:
-            return {'error': 'Device is not a Grohe Sense Guard device'}
+            raise HomeAssistantError('Device does not exist or device is not a Grohe Sense Guard device')
 
 
 
