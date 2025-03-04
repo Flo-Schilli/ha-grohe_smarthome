@@ -14,7 +14,7 @@ from ...dto.grohe_device import GroheDevice
 from ...dto.config_dtos import SensorDto, NotificationsDto, ConfigSpecialType
 
 _LOGGER = logging.getLogger(__name__)
-
+DATETIME_DIFF_SECONDS = 60
 
 class Sensor(CoordinatorEntity, SensorEntity):
     def __init__(self, domain: str, coordinator: DataUpdateCoordinator, device: GroheDevice, sensor: SensorDto,
@@ -26,6 +26,11 @@ class Sensor(CoordinatorEntity, SensorEntity):
         self._sensor = sensor
         self._domain = domain
         self._value: float | str | int | dict[str, any] | datetime | None = self._get_value(initial_value)
+        self._old_datetime_value: datetime | None = None
+
+        # If value is a datetime, set the old_datetime_value to the same as value
+        if isinstance(self._value, datetime):
+            self._old_datetime_value = self._value
 
         # Needed for Sensor Entity
         self._attr_name = f'{self._device.name} {self._sensor.name}'
@@ -81,6 +86,17 @@ class Sensor(CoordinatorEntity, SensorEntity):
                     value = datetime.now().astimezone() - timedelta(minutes=value)
                 else:
                     value = datetime.fromisoformat(value)
+
+                _LOGGER.debug(f'New timestamp value for {self._sensor.name} is: {value}. Old one was {self._old_datetime_value} and the difference is: {(value - self._old_datetime_value).total_seconds()} seconds.')
+
+                if self._old_datetime_value is not None and abs((value - self._old_datetime_value).total_seconds()) <= DATETIME_DIFF_SECONDS:
+                    _LOGGER.debug(f'Timestamp value {self._sensor.name} is the same as the old one, so we will not update it: {value}')
+                    value = self._old_datetime_value
+                else:
+                    self._old_datetime_value = value
+
+                # Only show minutes and not seconds
+                value = value.replace(second=0, microsecond=0)
 
             if self._sensor.device_class is not None and self._sensor.device_class == 'Enum' and value is not None:
                 if self._sensor.enum is not None:
