@@ -25,8 +25,8 @@ class Sensor(CoordinatorEntity, SensorEntity):
         self._notification_config = notification_config
         self._sensor = sensor
         self._domain = domain
-        self._value: float | str | int | dict[str, any] | datetime | None = self._get_value(initial_value)
         self._old_datetime_value: datetime | None = None
+        self._value: float | str | int | dict[str, any] | datetime | None = self._get_value(initial_value)
 
         # If value is a datetime, set the old_datetime_value to the same as value
         if isinstance(self._value, datetime):
@@ -87,7 +87,8 @@ class Sensor(CoordinatorEntity, SensorEntity):
                 else:
                     value = datetime.fromisoformat(value)
 
-                _LOGGER.debug(f'New timestamp value for {self._sensor.name} is: {value}. Old one was {self._old_datetime_value} and the difference is: {(value - self._old_datetime_value).total_seconds()} seconds.')
+                if self._old_datetime_value is not None:
+                    _LOGGER.debug(f'New timestamp value for {self._sensor.name} is: {value}. Old one was {self._old_datetime_value} and the difference is: {(value - self._old_datetime_value).total_seconds()} seconds.')
 
                 if self._old_datetime_value is not None and abs((value - self._old_datetime_value).total_seconds()) <= DATETIME_DIFF_SECONDS:
                     _LOGGER.debug(f'Timestamp value {self._sensor.name} is the same as the old one, so we will not update it: {value}')
