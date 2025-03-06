@@ -12,7 +12,7 @@ from custom_components.grohe_smarthome.entities.interface.coordinator_interface 
 _LOGGER = logging.getLogger(__name__)
 
 class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
-    def __init__(self, hass: HomeAssistant, domain: str, api: GroheClient) -> None:
+    def __init__(self, hass: HomeAssistant, domain: str, api: GroheClient, log_response_data: bool = False) -> None:
         super().__init__(hass, _LOGGER, name='Grohe', update_interval=timedelta(seconds=900), always_update=True)
         self._api = api
         self._domain = domain
@@ -20,6 +20,7 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
         self._timezone = datetime.now().astimezone().tzinfo
         self._last_update = datetime.now().astimezone().replace(tzinfo=self._timezone)
         self._data: Dict[str, any] = {}
+        self._log_response_data = log_response_data
 
     async def _get_data(self) -> Dict[str, any]:
         api_data = await self._api.get_profile_notifications(50)
@@ -35,6 +36,9 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
         try:
             _LOGGER.debug(f'Updating generic profile data for domain {self._domain}')
             data = await self._get_data()
+
+            if self._log_response_data:
+                _LOGGER.debug(f'Response data for Profile: {data}')
 
             self._last_update = datetime.now().astimezone().replace(tzinfo=self._timezone)
             return data
@@ -54,3 +58,6 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
     def set_polling_interval(self, polling: int) -> None:
         self.update_interval = timedelta(seconds=polling)
         self.async_update_listeners()
+
+    def set_log_response_data(self, log_response_data: bool) -> None:
+        self._log_response_data = log_response_data

@@ -14,3 +14,7 @@ class CoordinatorInterface:
     @abstractmethod
     def set_polling_interval(self, polling: int) -> None:
         raise NotImplementedError
+
+    @abstractmethod
+    def set_log_response_data(self, log_response_data: bool) -> None:
+        raise NotImplementedError

@@ -59,8 +59,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     # Login to Grohe backend
     httpx_client_ha = httpx_client.get_async_client(ha)
     httpx_client_ha.cookies.clear()
-    request_timeout = entry.data.get('request_timeout', 10)
-    connect_timeout = entry.data.get('connect_timeout', 5)
+    request_timeout = entry.options.get('request_timeout', 10)
+    connect_timeout = entry.options.get('connect_timeout', 5)
+    log_response_data = entry.options.get('log_response_data', False)
 
     httpx_client_ha.timeout = httpx.Timeout(request_timeout, connect=connect_timeout)
     
@@ -70,24 +71,24 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     # Get all devices available
     devices: List[GroheDevice] = await GroheDevice.get_devices(api)
 
-    polling = entry.data.get('polling', 300)
+    polling = entry.options.get('polling', 300)
     coordinators: Dict[str, CoordinatorInterface] = {}
     for grohe_device in devices:
         if grohe_device.type == GroheTypes.GROHE_SENSE:
-            sense_coordinator = SenseCoordinator(ha, DOMAIN, grohe_device, api, polling)
+            sense_coordinator = SenseCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
             coordinators[grohe_device.appliance_id] = sense_coordinator
         elif grohe_device.type == GroheTypes.GROHE_SENSE_GUARD:
-            guard_coordinator = GuardCoordinator(ha, DOMAIN, grohe_device, api, polling)
+            guard_coordinator = GuardCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
             coordinators[grohe_device.appliance_id] = guard_coordinator
         elif grohe_device.type == GroheTypes.GROHE_BLUE_HOME:
-            blue_home_coordinator = BlueHomeCoordinator(ha, DOMAIN, grohe_device, api, polling)
+            blue_home_coordinator = BlueHomeCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
             coordinators[grohe_device.appliance_id] = blue_home_coordinator
         elif grohe_device.type == GroheTypes.GROHE_BLUE_PROFESSIONAL:
-            blue_prof_coordinator = BlueProfCoordinator(ha, DOMAIN, grohe_device, api, polling)
+            blue_prof_coordinator = BlueProfCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
             coordinators[grohe_device.appliance_id] = blue_prof_coordinator
 
     # Add a generic profile coordinator so that we can use general data for the user profile as well
-    profile_coordinator = ProfileCoordinator(ha, DOMAIN, api)
+    profile_coordinator = ProfileCoordinator(ha, DOMAIN, api, log_response_data)
     coordinators[api.user_id] = profile_coordinator
 
     # Store devices and login information into hass object
@@ -101,15 +102,17 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     ####### OPTIONS - FLOW RELOAD ######################################################################################
     async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         _LOGGER.debug("Updating Grohe Sense options")
-        polling = config_entry.data.get('polling', 300)
-        request_timeout = config_entry.data.get('request_timeout', 10)
-        connect_timeout = config_entry.data.get('connect_timeout', 5)
+        polling = config_entry.options.get('polling', 300)
+        request_timeout = config_entry.options.get('request_timeout', 10)
+        connect_timeout = config_entry.options.get('connect_timeout', 5)
+        log_response_data = config_entry.options.get('log_response_data', False)
 
         httpx_client_ha.timeout = httpx.Timeout(request_timeout, connect=connect_timeout)
 
         for entity in hass.data[DOMAIN].values():
             for coordinator in entity["coordinator"].values():
                 coordinator.set_polling_interval(polling)
+                coordinator.set_log_response_data(log_response_data)
                 await coordinator.async_request_refresh()
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
