@@ -19,6 +19,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Required('polling', 'Set a custom polling interval in seconds.', 300): config_validation.positive_int,
                     vol.Required('request_timeout', 'Set a custom custom request timeout in seconds (for httpx).', 10): config_validation.positive_int,
                     vol.Required('connect_timeout', 'Set a custom custom connect timeout in seconds (for httpx).', 5): config_validation.positive_int,
+                    vol.Required('log_response_data', 'Define if response data shall be logged as well', False): bool,
                 }), self.config_entry.options
             ),
         )
