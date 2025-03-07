@@ -337,9 +337,39 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         else:
             raise HomeAssistantError('Device does not exist or device is not a Grohe Sense Guard device')
 
+    async def handle_login_and_get_tokens(call: ServiceCall) -> ServiceResponse:
+        _LOGGER.debug('Login and get tokens for params: %s', call.data)
+        username = call.data.get('username')
+        password = call.data.get('password')
+        if username is None or password is None:
+            raise HomeAssistantError('Username and password are required')
+
+        httpx_client_temp = httpx_client.get_async_client(ha)
+        httpx_client_temp.cookies.clear()
+
+        temp_api = GroheClient(username, password, httpx_client_temp)
+        await temp_api.login()
+        try:
+            dashboard = await temp_api.get_dashboard()
+        except Exception as e:
+            dashboard = None
+
+        tokens = temp_api.get_tokens()
+
+        return {'tokens': tokens.to_dict(), 'dashboard': dashboard}
 
 
     ha.services.async_register(DOMAIN, 'get_dashboard', handle_dashboard_export, schema=None, supports_response=SupportsResponse.ONLY)
+    ha.services.async_register(
+        DOMAIN,
+        'get_tokens_from_username',
+        handle_login_and_get_tokens,
+        schema=voluptuous.Schema({
+            voluptuous.Required('username'): str,
+            voluptuous.Required('password'): str,
+        }),
+        supports_response=SupportsResponse.ONLY)
+
     ha.services.async_register(
         DOMAIN,
         'get_appliance_data',

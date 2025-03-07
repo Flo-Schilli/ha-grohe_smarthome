@@ -13,7 +13,7 @@
     "dataclasses-json==0.6.7",
     "lxml==5.3.0",
     "python-benedict==0.34.0",
-    "grohe==0.1.0"
+    "grohe==0.2.2"
   ],
   "version": "0.1.4"
 }
