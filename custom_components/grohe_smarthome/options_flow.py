@@ -1,5 +1,5 @@
 from homeassistant import config_entries
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.data_entry_flow import FlowResult, section
 import voluptuous as vol
 from homeassistant.helpers import config_validation
 
@@ -17,9 +17,23 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=self.add_suggested_values_to_schema(
                 vol.Schema({
                     vol.Required('polling', 'Set a custom polling interval in seconds.', 300): config_validation.positive_int,
-                    vol.Required('request_timeout', 'Set a custom custom request timeout in seconds (for httpx).', 10): config_validation.positive_int,
-                    vol.Required('connect_timeout', 'Set a custom custom connect timeout in seconds (for httpx).', 5): config_validation.positive_int,
-                    vol.Required('log_response_data', 'Define if response data shall be logged as well', False): bool,
+                    vol.Required('logging_options'): section(
+                        vol.Schema({
+                            vol.Required('log_response_data',
+                                         'Define if response data shall be logged as well',
+                                         False): bool,
+                        }),
+                    ),
+                    vol.Required('network_options'): section(
+                        vol.Schema({
+                            vol.Required('request_timeout',
+                                         'Set a custom custom request timeout in seconds (for httpx).',
+                                         10): config_validation.positive_int,
+                            vol.Required('connect_timeout',
+                                         'Set a custom custom connect timeout in seconds (for httpx).',
+                                         5): config_validation.positive_int,
+                        }),
+                    ),
                 }), self.config_entry.options
             ),
         )
