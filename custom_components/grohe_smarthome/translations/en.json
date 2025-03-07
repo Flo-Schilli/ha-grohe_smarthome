@@ -9,6 +9,32 @@
           "password": "Password"
         }
       }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data":{
+          "polling": "The polling interval for all devices"
+        },
+        "sections": {
+          "logging_options": {
+            "name": "Logging",
+            "description": "Logging options for Grohe Smarthome",
+            "data": {
+              "log_response_data": "Log response data additionally in DEBUG"
+            }
+          },
+          "network_options": {
+            "name": "Network settings",
+            "description": "Network related settings",
+            "data": {
+              "request_timeout": "Timeout for a request",
+              "connect_timeout": "Timeout for a connection to the endpoint"
+            }
+          }
+        }
+      }
     },
     "error": {
       "invalid_api_key": "This message will be displayed if `invalid_api_key` is returned as a flow error."
