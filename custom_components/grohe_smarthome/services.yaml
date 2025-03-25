@@ -2,6 +2,23 @@ get_dashboard:
   name: Get Dashboard Data
   description: Exports data from the Grohe Dashboard endpoint
 
+get_tokens_from_username:
+  name: Get Tokens from Username/Password
+  description: Get an actual token for username/password combination
+  fields:
+    username:
+      name: Username
+      description: The username for your Grohe account
+      required: true
+      selector:
+        text:
+    password:
+      name: Password
+      description: The password for your Grohe account
+      required: true
+      selector:
+        text:
+
 get_appliance_data:
   name: Get Appliance data
   description: Get the actual appliance data for the provided device name
