@@ -8,11 +8,13 @@ get_tokens_from_username:
   fields:
     username:
       name: Username
+      description: The username for your Grohe account
       required: true
       selector:
         text:
     password:
       name: Password
+      description: The password for your Grohe account
       required: true
       selector:
         text:
