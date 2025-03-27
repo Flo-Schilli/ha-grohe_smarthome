@@ -9,6 +9,7 @@ from grohe.enum.grohe_enum import GroheGroupBy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from custom_components.grohe_smarthome.dto.config_dtos import DeviceConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.dto.notification_dto import Notification
 from custom_components.grohe_smarthome.entities.interface.coordinator_button_interface import CoordinatorButtonInterface
@@ -19,7 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class GuardCoordinator(DataUpdateCoordinator, CoordinatorInterface, CoordinatorValveInterface, CoordinatorButtonInterface):
-    def __init__(self, hass: HomeAssistant, domain: str, device: GroheDevice, api: GroheClient, polling: int = 300, log_response_data: bool = False) -> None:
+    def __init__(self, hass: HomeAssistant, domain: str, device: GroheDevice, api: GroheClient, device_config: DeviceConfigDto | None = None, polling: int = 300, log_response_data: bool = False) -> None:
         super().__init__(hass, _LOGGER, name='Grohe Sense', update_interval=timedelta(seconds=polling), always_update=True)
         self._api = api
         self._domain = domain
@@ -30,6 +31,12 @@ class GuardCoordinator(DataUpdateCoordinator, CoordinatorInterface, CoordinatorV
         self._last_update = datetime.now().astimezone().replace(tzinfo=self._timezone)
         self._notifications: List[Notification] = []
         self._log_response_data = log_response_data
+        self._has_pressure_measurement = False
+
+        if device_config is not None and device_config.min_pressure_measurement_version is not None:
+            pressure_version = tuple(map(int, device_config.min_pressure_measurement_version.split('.')[:2]))
+            if device.stripped_sw_version >= pressure_version:
+                self._has_pressure_measurement = True
 
     async def _get_total_value(self, date_from: datetime, date_to: datetime, group_by: GroheGroupBy) -> float:
         try:
@@ -66,11 +73,12 @@ class GuardCoordinator(DataUpdateCoordinator, CoordinatorInterface, CoordinatorV
 
         pressure: None | Dict[str, any]  = None
 
-        pressure = await self._api.get_appliance_pressure_measurement(
-            self._device.location_id,
-            self._device.room_id,
-            self._device.appliance_id
-        )
+        if self._has_pressure_measurement:
+            pressure = await self._api.get_appliance_pressure_measurement(
+                self._device.location_id,
+                self._device.room_id,
+                self._device.appliance_id
+            )
 
         if (self._total_value_update_day is not None and datetime.now().astimezone().day - self._total_value_update_day.day >= 1) or (self._total_value_update_day is None):
             if self._total_value_update_day is None:

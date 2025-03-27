@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, HomeAssistantError
 from homeassistant.helpers import device_registry, httpx_client
 from custom_components.grohe_smarthome.const import DOMAIN, CONF_USERNAME, CONF_PASSWORD, CONF_PLATFORM
+from custom_components.grohe_smarthome.dto.config_dtos import ConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.entities.config_loader import ConfigLoader
 from custom_components.grohe_smarthome.entities.coordinator.blue_home_coordinator import BlueHomeCoordinator
@@ -21,6 +22,7 @@ from custom_components.grohe_smarthome.entities.coordinator.blue_prof_coordinato
 from custom_components.grohe_smarthome.entities.coordinator.guard_coordinator import GuardCoordinator
 from custom_components.grohe_smarthome.entities.coordinator.profile_coordinator import ProfileCoordinator
 from custom_components.grohe_smarthome.entities.coordinator.sense_coordinator import SenseCoordinator
+from custom_components.grohe_smarthome.entities.entity_helper import EntityHelper
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import CoordinatorInterface
 
 
@@ -54,7 +56,7 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     config_loader = ConfigLoader(os.path.join(os.path.dirname(__file__), 'config'))
 
     notifications = await ha.async_add_executor_job(config_loader.load_notifications)
-    config = await ha.async_add_executor_job(config_loader.load_config)
+    config : ConfigDto = await ha.async_add_executor_job(config_loader.load_config)
 
     # Login to Grohe backend
     httpx_client_ha = httpx_client.get_async_client(ha)
@@ -78,7 +80,8 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             sense_coordinator = SenseCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
             coordinators[grohe_device.appliance_id] = sense_coordinator
         elif grohe_device.type == GroheTypes.GROHE_SENSE_GUARD:
-            guard_coordinator = GuardCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
+            device = config.get_device_config(EntityHelper.get_config_name_by_device_type(grohe_device))
+            guard_coordinator = GuardCoordinator(ha, DOMAIN, grohe_device, api, device.device_config, polling, log_response_data)
             coordinators[grohe_device.appliance_id] = guard_coordinator
         elif grohe_device.type == GroheTypes.GROHE_BLUE_HOME:
             blue_home_coordinator = BlueHomeCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)

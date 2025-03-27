@@ -22,6 +22,8 @@ devices:
           keypath: 'details.notifications[0]'
           special_type: 'Notification'
     - type: GroheSenseGuard
+      device_config:
+        min_pressure_measurement_version: '3.06'
       todos:
         - name: 'Notifications'
           keypath: 'notifications.notifications'

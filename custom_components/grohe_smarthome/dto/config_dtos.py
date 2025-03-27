@@ -91,12 +91,19 @@ class ButtonDto:
     name: str
     commands: List[ButtonCommands]
     min_version: Optional[str] = None
+
+@dataclass_json
+@dataclass
+class DeviceConfigDto:
+    has_pressure_measurements: bool = False
+    min_pressure_measurement_version: Optional[str] = None
     
 @dataclass_json
 @dataclass
 class DeviceDto:
     type: str
     sensors: List[SensorDto]
+    device_config: Optional[DeviceConfigDto] = None
     todos: Optional[List[TodoDto]] = None
     valves: Optional[List[ValveDto]] = None
     buttons: Optional[List[ButtonDto]] = None
