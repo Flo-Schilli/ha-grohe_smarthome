@@ -49,7 +49,7 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
 
         command_send_at: datetime = datetime.now().astimezone()
 
-        while datetime.now().astimezone() - command_send_at < timedelta(seconds=self._timeout):
+        while datetime.now().astimezone() - command_send_at < timedelta(seconds=self._update_timeout):
             api_data = await self._api.get_appliance_details(
                 self._device.location_id,
                 self._device.room_id,
