@@ -1,8 +1,10 @@
+import asyncio
 import logging
 from datetime import timedelta
 from typing import List, Dict
 from datetime import datetime
 
+from benedict import benedict
 from grohe import GroheClient
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -26,7 +28,16 @@ class BlueProfCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
         self._notifications: List[Notification] = []
         self._log_response_data = log_response_data
 
+        self._key_path_for_timestamp = 'details.data_latest_measurement.timestamp'
+        self._last_measurement_timestamp: datetime | None = None
+        self._last_measurement_updated: bool = False
+        self._update_timeout = 10
+        self._update_interval = 1
+
     async def _get_data(self) -> Dict[str, any]:
+
+        self._last_measurement_updated = False
+
         # Before each call, get the new current measurement
         await self._api.set_appliance_command(
             self._device.location_id,
@@ -35,10 +46,28 @@ class BlueProfCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
             self._device.type,
             {'command': {'get_current_measurement': True}})
 
-        api_data = await self._api.get_appliance_details(
-            self._device.location_id,
-            self._device.room_id,
-            self._device.appliance_id)
+        command_send_at: datetime = datetime.now().astimezone()
+
+        while datetime.now().astimezone() - command_send_at < timedelta(seconds=self._timeout):
+            api_data = await self._api.get_appliance_details(
+                self._device.location_id,
+                self._device.room_id,
+                self._device.appliance_id)
+
+            data = benedict(api_data)
+            if data.get(self._key_path_for_timestamp) is not None:
+                data_set_timestamp = datetime.fromisoformat(data.get(self._key_path_for_timestamp)).astimezone()
+
+                if self._last_measurement_timestamp is None or data_set_timestamp > self._last_measurement_timestamp:
+                    self._last_measurement_timestamp = data_set_timestamp
+                    self._last_measurement_updated = True
+                    break
+
+            await asyncio.sleep(self._update_interval)
+
+        if not self._last_measurement_updated:
+            _LOGGER.warning(
+                f'No new measurement found for device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id}) after {self._update_timeout} seconds.')
 
         try:
             status = { val['type']: val['value'] for val in api_data['status'] }
