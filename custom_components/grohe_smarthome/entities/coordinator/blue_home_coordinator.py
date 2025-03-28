@@ -4,6 +4,7 @@ from datetime import timedelta, time
 from typing import List, Dict
 from datetime import datetime
 
+import httpx
 from benedict import benedict
 from grohe import GroheClient
 from homeassistant.core import HomeAssistant
@@ -42,12 +43,21 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
         _LOGGER.debug(
             f'Sending command to device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})')
         # Before each call, get the new current measurement
-        await self._api.set_appliance_command(
-            self._device.location_id,
-            self._device.room_id,
-            self._device.appliance_id,
-            self._device.type,
-            {'command': {'get_current_measurement': True}})
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                await self._api.set_appliance_command(
+                    self._device.location_id,
+                    self._device.room_id,
+                    self._device.appliance_id,
+                    self._device.type,
+                    {'command': {'get_current_measurement': True}})
+                break
+            except httpx.ReadTimeout as e:
+                _LOGGER.info(f'Command to device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id}) timed out: {e} (retry {attempt + 1}/3)')
+                if attempt + 1 >= max_attempts:
+                    raise e
+
 
         command_send_at: datetime = datetime.now().astimezone()
 
