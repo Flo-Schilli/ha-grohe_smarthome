@@ -33,7 +33,7 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
         self._last_measurement_timestamp: datetime | None = None
         self._last_measurement_updated: bool = False
         self._update_timeout = 15
-        self._update_interval = 1
+        self._update_interval = 3
 
 
     async def _get_data(self) -> Dict[str, any]:
@@ -87,6 +87,9 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
                     self._last_measurement_timestamp = data_set_timestamp
                     self._last_measurement_updated = True
                     break
+                else:
+                    _LOGGER.debug(
+                        f'No new measurement found for device {self._device.type} with name {self._device.name}. Last measurement timestamp: {self._last_measurement_timestamp} returned timestamp: {data_set_timestamp}. Should be timestamp after {command_send_at}')
 
             await asyncio.sleep(self._update_interval)
 
