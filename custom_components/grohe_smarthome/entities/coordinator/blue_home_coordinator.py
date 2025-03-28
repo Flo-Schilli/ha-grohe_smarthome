@@ -31,7 +31,7 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
         self._key_path_for_timestamp = 'details.data_latest_measurement.timestamp'
         self._last_measurement_timestamp: datetime | None = None
         self._last_measurement_updated: bool = False
-        self._update_timeout = 10
+        self._update_timeout = 15
         self._update_interval = 1
 
 
@@ -39,6 +39,8 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
 
         self._last_measurement_updated = False
 
+        _LOGGER.debug(
+            f'Sending command to device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})')
         # Before each call, get the new current measurement
         await self._api.set_appliance_command(
             self._device.location_id,
@@ -49,17 +51,29 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
 
         command_send_at: datetime = datetime.now().astimezone()
 
+        _LOGGER.debug(
+            f'Command send successfully to device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id}) at {command_send_at}')
+
         while datetime.now().astimezone() - command_send_at < timedelta(seconds=self._update_timeout):
+            _LOGGER.debug(
+                f'Waiting for new data to receive on device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})')
+
             api_data = await self._api.get_appliance_details(
                 self._device.location_id,
                 self._device.room_id,
                 self._device.appliance_id)
 
+            _LOGGER.debug(
+                f'Data received on device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})')
+
             data = benedict(api_data)
             if data.get(self._key_path_for_timestamp) is not None:
-                data_set_timestamp = datetime.fromisoformat(data.get(self._key_path_for_timestamp)).astimezone()
+                data_set_timestamp: datetime = datetime.fromisoformat(data.get(self._key_path_for_timestamp)).astimezone()
 
                 if self._last_measurement_timestamp is None or data_set_timestamp > self._last_measurement_timestamp:
+                    _LOGGER.debug(
+                        f'Last measurement timestamp updated on device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})')
+
                     self._last_measurement_timestamp = data_set_timestamp
                     self._last_measurement_updated = True
                     break
