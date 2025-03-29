@@ -76,7 +76,7 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
             _LOGGER.debug(
                 f'Data received on device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})')
 
-            data = benedict(api_data)
+            data = benedict({ 'details': api_data })
             if data.get(self._key_path_for_timestamp) is not None:
                 data_set_timestamp: datetime = datetime.fromisoformat(data.get(self._key_path_for_timestamp)).astimezone()
 
