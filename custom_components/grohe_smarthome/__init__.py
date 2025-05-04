@@ -67,7 +67,7 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
 
     httpx_client_ha.timeout = httpx.Timeout(request_timeout, connect=connect_timeout)
     
-    api = GroheClient(entry.data.get('username'), entry.data.get('password'), httpx_client_ha)
+    api = GroheClient(entry.data.get('username'), entry.data.get('password'), httpx_client_ha, 120)
     await api.login()
 
     # Get all devices available
