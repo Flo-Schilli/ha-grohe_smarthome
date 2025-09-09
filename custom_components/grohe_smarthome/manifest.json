@@ -1,10 +1,7 @@
 {
   "domain": "grohe_smarthome",
   "name": "Grohe Smarthome",
-  "codeowners": [
-    "@Flo-Schilli",
-    "@koproductions-code"
-  ],
+  "codeowners": ["@Flo-Schilli", "@koproductions-code"],
   "config_flow": true,
   "documentation": "https://github.com/Flo-Schilli/ha-grohe_smarthome",
   "iot_class": "cloud_polling",
@@ -13,7 +10,7 @@
     "dataclasses-json==0.6.7",
     "lxml==5.3.0",
     "python-benedict==0.34.0",
-    "grohe==0.2.3"
+    "grohe==0.2.4"
   ],
   "version": "0.1.5"
 }
