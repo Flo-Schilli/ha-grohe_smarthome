@@ -23,8 +23,8 @@ get_appliance_data:
   name: Get Appliance data
   description: Get the actual appliance data for the provided device name
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
   fields:
     date_from:
       name: Date from
@@ -56,22 +56,22 @@ get_appliance_details:
   name: Get Appliance details
   description: Get the actual appliance details for the provided device name
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
 
 get_appliance_command:
   name: Get Appliance command
   description: Get the actual possible appliance commands for the provided device name
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
 
 set_appliance_command:
   name: Set Appliance command
   description: Send a command to the appliance for the provided device name
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
   fields:
     commands:
       name: Commands to send
@@ -84,22 +84,22 @@ get_appliance_status:
   name: Get Appliance status
   description: Get the actual appliance status for the provided device name
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
 
 get_appliance_pressure_measurement:
   name: Get Appliance pressure measurements
   description: Get the actual appliance pressure measurements for the provided device name
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
 
 get_appliance_notifications:
   name: Get Appliance notifications
   description: Get the actual appliance notifications for the provided device name
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
 
 get_profile_notifications:
   name: Get Profile notifications
@@ -119,8 +119,8 @@ tap_water:
   name: Tap water
   description: Tap water from Grohe Blue Home/Professional
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
   fields:
     water_type:
       name: Water type
@@ -146,8 +146,8 @@ set_snooze:
   name: Set snooze for Sense Guard
   description: Set the Sense Guard to snooze for the specified time (in minutes) so that a bigger amount of water can be withdrawn and the device doesn't close the valve
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
   fields:
     duration:
       name: Duration
@@ -164,5 +164,5 @@ disable_snooze:
   name: Disable snooze for Sense Guard
   description: Disable the snooze for the Sense Guard
   target:
-    device:
-      integration: grohe_smarthome
+    entity:
+      - integration: grohe_smarthome
