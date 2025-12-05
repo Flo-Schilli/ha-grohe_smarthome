@@ -82,7 +82,8 @@ class GuardCoordinator(DataUpdateCoordinator, CoordinatorInterface, CoordinatorV
 
         if (self._total_value_update_day is not None and datetime.now().astimezone().day - self._total_value_update_day.day >= 1) or (self._total_value_update_day is None):
             if self._total_value_update_day is None:
-                date_from = datetime.now().astimezone() - timedelta(days=2000)
+                install_date = datetime.fromisoformat(api_data['installation_date'])
+                date_from = install_date
                 date_to = datetime.now().astimezone() - timedelta(days=1)
                 group_by = GroheGroupBy.YEAR
             else:
@@ -91,9 +92,14 @@ class GuardCoordinator(DataUpdateCoordinator, CoordinatorInterface, CoordinatorV
                 group_by = GroheGroupBy.DAY
 
             _LOGGER.debug(f'Old total water consumption: {self._total_value}')
-            self._total_value = self._total_value + await self._get_total_value(date_from, date_to, group_by)
+            self._total_value = round(self._total_value + await self._get_total_value(date_from, date_to, group_by), 2)
             _LOGGER.debug(f'New total water consumption: {self._total_value}')
             self._total_value_update_day = datetime.now().astimezone().replace(tzinfo=self._timezone)
+
+
+        today_water_consumption = await self._get_total_value(datetime.now().astimezone(), datetime.now().astimezone(), GroheGroupBy.DAY)
+        latest_data = api_data.get('data_latest') or {}
+        _LOGGER.debug(f'Todays water consumption from appliance data: {today_water_consumption}. Absolute difference to daily_consumption is: {round(abs(today_water_consumption - latest_data.get('daily_consumption', 0)), 2)}')
 
 
         try:
@@ -103,7 +109,7 @@ class GuardCoordinator(DataUpdateCoordinator, CoordinatorInterface, CoordinatorV
             status = None
 
 
-        data = {'details': api_data, 'status': status, 'pressure': pressure, 'total_water_consumption': self._total_value}
+        data = {'details': api_data, 'status': status, 'pressure': pressure, 'total_water_consumption': self._total_value + today_water_consumption}
 
         return data
 
