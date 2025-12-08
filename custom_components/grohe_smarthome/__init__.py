@@ -510,3 +510,19 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         supports_response=SupportsResponse.ONLY)
 
     return True
+
+async def async_remove_config_entry_device(
+    ha: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
+) -> bool:
+    _LOGGER.debug("Removing Grohe SmartHome device %s", device_entry.id)
+    devices: List[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get("devices")
+
+    device_removed = False
+    for device in devices:
+        if device.name == device_entry.name:
+            devices.remove(device)
+            device_removed = True
+
+    _LOGGER.debug("All remaining device %s", str(ha.data[DOMAIN][config_entry.entry_id].get("devices")))
+
+    return device_removed
