@@ -517,11 +517,10 @@ async def async_remove_config_entry_device(
     _LOGGER.debug("Removing Grohe SmartHome device %s", device_entry.id)
     devices: List[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get("devices")
 
-    device_removed = False
-    for device in devices:
-        if device.name == device_entry.name:
-            devices.remove(device)
-            device_removed = True
+    # Remove devices matching the device_entry.name safely using list comprehension
+    original_count = len(devices)
+    devices[:] = [device for device in devices if device.name != device_entry.name]
+    device_removed = len(devices) < original_count
 
     _LOGGER.debug("All remaining device %s", str(ha.data[DOMAIN][config_entry.entry_id].get("devices")))
 
