@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 
 import httpx
+from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.storage import Store
 import voluptuous
 from voluptuous import All, Length
