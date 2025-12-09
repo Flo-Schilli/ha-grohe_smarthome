@@ -525,7 +525,7 @@ async def async_remove_config_entry_device(
                 device_found = True
                 _LOGGER.debug("Removing device %s", device.appliance_id)
 
-        devices[:] = [device for device in devices if any(device.appliance_id in t for t in device_entry.identifiers)]
+        devices[:] = [device for device in devices if not any(device.appliance_id in t for t in device_entry.identifiers)]
 
         _LOGGER.debug("All remaining device %s", str(ha.data[DOMAIN][config_entry.entry_id].get("devices")))
 
