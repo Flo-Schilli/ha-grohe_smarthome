@@ -530,7 +530,7 @@ async def async_remove_config_entry_device(
         _LOGGER.debug("All remaining device %s", str(ha.data[DOMAIN][config_entry.entry_id].get("devices")))
 
         if not device_found:
-            _LOGGER.warning(f'Tried to remove Grohe SmartHome device {device_entry.name}, but it was not found in the list of actual devices.')
+            _LOGGER.warning('Tried to remove Grohe SmartHome device %s, but it was not found in the list of actual devices.', device_entry.name)
 
         return True
     except Exception as e:
