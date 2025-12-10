@@ -89,7 +89,7 @@ class GuardCoordinator(DataUpdateCoordinator, CoordinatorInterface, CoordinatorV
             group_by = GroheGroupBy.YEAR
 
             _LOGGER.debug(f'Old total water consumption: {self._total_value}')
-            self._total_value = round(await self._get_total_value(date_from, date_to, group_by), 2) - today_water_consumption
+            self._total_value = max(round(await self._get_total_value(date_from, date_to, group_by), 2) - today_water_consumption, 0)
             _LOGGER.debug(f'New total water consumption: {self._total_value}')
             self._total_value_update_day = datetime.now().astimezone().replace(tzinfo=self._timezone)
 
