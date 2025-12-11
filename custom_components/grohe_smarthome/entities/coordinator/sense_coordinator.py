@@ -33,7 +33,7 @@ class SenseCoordinator(DataUpdateCoordinator, CoordinatorInterface):
 
         try:
             status = { val['type']: val['value'] for val in api_data['status'] }
-        except AttributeError as e:
+        except (AttributeError, KeyError, TypeError) as e:
             _LOGGER.debug(f'Status could not be mapped: {e}')
             status = None
 
