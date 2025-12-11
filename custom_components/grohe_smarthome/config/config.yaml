@@ -18,9 +18,26 @@ devices:
           device_class: 'Battery'
           unit: 'Percentage'
           category: 'Diagnostic'
+        - name: 'Last measurement update'
+          keypath: 'details.data_latest.measurement.timestamp'
+          device_class: 'Timestamp'
+          category: 'Diagnostic'
+          enabled: false
         - name: 'Latest notification'
           keypath: 'details.notifications[0]'
           special_type: 'Notification'
+
+      binary_sensors:
+        - name: 'Update available'
+          keypath: 'status.update_available'
+          device_class: 'Update'
+          category: 'Diagnostic'
+          enabled: true
+        - name: 'Online'
+          keypath: 'status.connection'
+          category: 'Diagnostic'
+          device_class: 'Connectivity'
+          enabled: true
     - type: GroheSenseGuard
       device_config:
         min_pressure_measurement_version: '3.06'
