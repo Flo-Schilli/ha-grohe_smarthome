@@ -31,7 +31,13 @@ class SenseCoordinator(DataUpdateCoordinator, CoordinatorInterface):
             self._device.room_id,
             self._device.appliance_id)
 
-        data = {'details': api_data}
+        try:
+            status = { val['type']: val['value'] for val in api_data['status'] }
+        except AttributeError as e:
+            _LOGGER.debug(f'Status could not be mapped: {e}')
+            status = None
+
+        data = {'details': api_data, 'status': status}
         return data
 
     async def _async_update_data(self) -> dict:
