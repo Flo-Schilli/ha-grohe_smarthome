@@ -105,22 +105,26 @@ class GroheDevice:
                                     location_id = location.get('id')
                                     room_id = room.get('id')
                                     appliance_id = appliance.get('appliance_id')
+                                    registration_complete = appliance.get('registration_complete')
 
                                     _LOGGER.debug(
                                         f'Found in location {location_id} and room {room_id} the following appliance: {appliance_id} '
                                         f'from type {appliance.get('type')} with name {appliance.get('name')}'
                                     )
 
-                                    try:
-                                        device: GroheDevice = GroheDevice(location_id, room_id, room.get('name'), appliance)
-                                        if not device.is_valid_device_type():
-                                            _LOGGER.warning(f'Could not parse the following appliance as a GroheDevice. Please file '
-                                                            f'a new issue with your Grohe Devices and this information.'
-                                                            f'Appliance: {appliance.get('name')}, Appliance details: {appliance}')
-                                        else:
-                                            devices.append(device)
-                                    except ValueError as e:
-                                        _LOGGER.warning(f'Could not parse the following appliance as a GroheDevice: {appliance}. Error: {e}')
+                                    if registration_complete is True or registration_complete is None:
+                                        try:
+                                            device: GroheDevice = GroheDevice(location_id, room_id, room.get('name'), appliance)
+                                            if not device.is_valid_device_type():
+                                                _LOGGER.warning(f'Could not parse the following appliance as a GroheDevice. Please file '
+                                                                f'a new issue with your Grohe Devices and this information.'
+                                                                f'Appliance: {appliance.get('name')}, Appliance details: {appliance}')
+                                            else:
+                                                devices.append(device)
+                                        except ValueError as e:
+                                            _LOGGER.warning(f'Could not parse the following appliance as a GroheDevice: {appliance}. Error: {e}')
+                                    else:
+                                        _LOGGER.warning(f'Appliance {appliance_id} with name {appliance.get('name')} is not yet fully registered at Grohe. Skipping.')
                             else:
                                 _LOGGER.error(f'Could not find any appliances assigned to this room')
                     else:

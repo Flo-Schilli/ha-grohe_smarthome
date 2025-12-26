@@ -12,5 +12,5 @@
     "python-benedict==0.34.0",
     "grohe==0.2.4"
   ],
-  "version": "0.1.8"
+  "version": "0.1.9"
 }
