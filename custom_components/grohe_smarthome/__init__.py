@@ -515,14 +515,24 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_config_entry_device(
     ha: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
 ) -> bool:
-    _LOGGER.debug("Removing Grohe SmartHome device %s", device_entry.id)
-    devices: List[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get("devices")
+    try:
+        _LOGGER.debug("Removing Grohe SmartHome device %s", device_entry.id)
+        devices: List[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get("devices")
 
-    # Remove devices matching the device_entry.name safely using list comprehension
-    original_count = len(devices)
-    devices[:] = [device for device in devices if device.name != device_entry.name]
-    device_removed = len(devices) < original_count
+        device_found = False
+        for device in devices:
+            if any(device.appliance_id in t for t in device_entry.identifiers):
+                device_found = True
+                _LOGGER.debug("Removing device %s", device.appliance_id)
 
-    _LOGGER.debug("All remaining device %s", str(ha.data[DOMAIN][config_entry.entry_id].get("devices")))
+        devices[:] = [device for device in devices if not any(device.appliance_id in t for t in device_entry.identifiers)]
 
-    return device_removed
+        _LOGGER.debug("All remaining device %s", str(ha.data[DOMAIN][config_entry.entry_id].get("devices")))
+
+        if not device_found:
+            _LOGGER.warning('Tried to remove Grohe SmartHome device %s, but it was not found in the list of actual devices.', device_entry.name)
+
+        return True
+    except Exception as e:
+        _LOGGER.error("Error removing Grohe SmartHome device %s: %s", device_entry.id, str(e))
+        return False
