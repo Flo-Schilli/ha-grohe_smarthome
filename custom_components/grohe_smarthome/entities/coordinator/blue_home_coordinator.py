@@ -33,11 +33,10 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
         self._last_measurement_timestamp: datetime | None = None
         self._last_measurement_updated: bool = False
         self._update_timeout = 15
-        self._update_interval = 3
+        self._local_update_interval = 5
 
-
+    # This is being called by the binary_sensor and sensor functions
     async def _get_data(self) -> Dict[str, any]:
-
         self._last_measurement_updated = False
 
         _LOGGER.debug(
@@ -58,7 +57,6 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
                 if attempt + 1 >= max_attempts:
                     raise e
 
-
         command_send_at: datetime = datetime.now().astimezone()
 
         _LOGGER.debug(
@@ -67,6 +65,8 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
         while datetime.now().astimezone() - command_send_at < timedelta(seconds=self._update_timeout):
             _LOGGER.debug(
                 f'Waiting for new data to receive on device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})')
+
+            await asyncio.sleep(self._local_update_interval)
 
             api_data = await self._api.get_appliance_details(
                 self._device.location_id,
@@ -90,8 +90,6 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
                 else:
                     _LOGGER.debug(
                         f'No new measurement found for device {self._device.type} with name {self._device.name}. Last measurement timestamp: {self._last_measurement_timestamp} returned timestamp: {data_set_timestamp}. Should be timestamp after {command_send_at}')
-
-            await asyncio.sleep(self._update_interval)
 
 
         if not self._last_measurement_updated:
