@@ -29,7 +29,7 @@ class BlueHomeCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
         self._notifications: List[Notification] = []
         self._log_response_data = log_response_data
 
-        self._key_path_for_timestamp = 'details.data_latest_measurement.timestamp'
+        self._key_path_for_timestamp = 'details.data_latest.measurement.timestamp'
         self._last_measurement_timestamp: datetime | None = None
         self._last_measurement_updated: bool = False
         self._update_timeout = 15
