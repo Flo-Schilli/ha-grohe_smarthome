@@ -12,22 +12,46 @@ from voluptuous import All, Length
 from grohe import GroheClient, GroheGroupBy, GroheTypes, GroheTapType
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, HomeAssistantError
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    HomeAssistantError,
+)
 from homeassistant.helpers import device_registry, httpx_client
-from custom_components.grohe_smarthome.const import DOMAIN, CONF_USERNAME, CONF_PASSWORD, CONF_PLATFORM
+from custom_components.grohe_smarthome.const import (
+    DOMAIN,
+    CONF_USERNAME,
+    CONF_PASSWORD,
+    CONF_PLATFORM,
+)
 from custom_components.grohe_smarthome.dto.config_dtos import ConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.entities.config_loader import ConfigLoader
-from custom_components.grohe_smarthome.entities.coordinator.blue_home_coordinator import BlueHomeCoordinator
-from custom_components.grohe_smarthome.entities.coordinator.blue_prof_coordinator import BlueProfCoordinator
-from custom_components.grohe_smarthome.entities.coordinator.guard_coordinator import GuardCoordinator
-from custom_components.grohe_smarthome.entities.coordinator.profile_coordinator import ProfileCoordinator
-from custom_components.grohe_smarthome.entities.coordinator.sense_coordinator import SenseCoordinator
+from custom_components.grohe_smarthome.entities.coordinator.blue_home_coordinator import (
+    BlueHomeCoordinator,
+)
+from custom_components.grohe_smarthome.entities.coordinator.blue_prof_coordinator import (
+    BlueProfCoordinator,
+)
+from custom_components.grohe_smarthome.entities.coordinator.guard_coordinator import (
+    GuardCoordinator,
+)
+from custom_components.grohe_smarthome.entities.coordinator.profile_coordinator import (
+    ProfileCoordinator,
+)
+from custom_components.grohe_smarthome.entities.coordinator.sense_coordinator import (
+    SenseCoordinator,
+)
 from custom_components.grohe_smarthome.entities.entity_helper import EntityHelper
-from custom_components.grohe_smarthome.entities.interface.coordinator_interface import CoordinatorInterface
+from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
+    CoordinatorInterface,
+)
 
 
 _LOGGER = logging.getLogger(__name__)
+
 
 def find_device_by_device_id(
     hass: HomeAssistant, devices: List[GroheDevice], device_id: str
@@ -54,41 +78,62 @@ async def async_unload_entry(ha: HomeAssistant, entry: ConfigEntry):
 async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("Loading Grohe Entry")
 
-    config_loader = ConfigLoader(os.path.join(os.path.dirname(__file__), 'config'))
+    config_loader = ConfigLoader(os.path.join(os.path.dirname(__file__), "config"))
 
     notifications = await ha.async_add_executor_job(config_loader.load_notifications)
-    config : ConfigDto = await ha.async_add_executor_job(config_loader.load_config)
+    config: ConfigDto = await ha.async_add_executor_job(config_loader.load_config)
 
     # Login to Grohe backend
     httpx_client_ha = httpx_client.get_async_client(ha)
     httpx_client_ha.cookies.clear()
-    request_timeout = entry.options.get('request_timeout', 10)
-    connect_timeout = entry.options.get('connect_timeout', 5)
-    log_response_data = entry.options.get('log_response_data', False)
+    # Options
+    network_options = entry.options.get("network_options", {})
+    logging_options = entry.options.get("logging_options", {})
+    request_timeout = network_options.get("request_timeout", 10)
+    connect_timeout = network_options.get("connect_timeout", 5)
+    log_response_data = logging_options.get("log_response_data", False)
 
     httpx_client_ha.timeout = httpx.Timeout(request_timeout, connect=connect_timeout)
-    
-    api = GroheClient(entry.data.get('username'), entry.data.get('password'), httpx_client_ha, 120)
+
+    api = GroheClient(
+        entry.data.get("username"), entry.data.get("password"), httpx_client_ha, 120
+    )
     await api.login()
 
     # Get all devices available
     devices: List[GroheDevice] = await GroheDevice.get_devices(api)
 
-    polling = entry.options.get('polling', 300)
+    polling = entry.options.get("polling", 300)
     coordinators: Dict[str, CoordinatorInterface] = {}
     for grohe_device in devices:
         if grohe_device.type == GroheTypes.GROHE_SENSE:
-            sense_coordinator = SenseCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
+            sense_coordinator = SenseCoordinator(
+                ha, DOMAIN, grohe_device, api, polling, log_response_data
+            )
             coordinators[grohe_device.appliance_id] = sense_coordinator
         elif grohe_device.type == GroheTypes.GROHE_SENSE_GUARD:
-            device = config.get_device_config(EntityHelper.get_config_name_by_device_type(grohe_device))
-            guard_coordinator = GuardCoordinator(ha, DOMAIN, grohe_device, api, device.device_config, polling, log_response_data)
+            device = config.get_device_config(
+                EntityHelper.get_config_name_by_device_type(grohe_device)
+            )
+            guard_coordinator = GuardCoordinator(
+                ha,
+                DOMAIN,
+                grohe_device,
+                api,
+                device.device_config,
+                polling,
+                log_response_data,
+            )
             coordinators[grohe_device.appliance_id] = guard_coordinator
         elif grohe_device.type == GroheTypes.GROHE_BLUE_HOME:
-            blue_home_coordinator = BlueHomeCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
+            blue_home_coordinator = BlueHomeCoordinator(
+                ha, DOMAIN, grohe_device, api, polling, log_response_data
+            )
             coordinators[grohe_device.appliance_id] = blue_home_coordinator
         elif grohe_device.type == GroheTypes.GROHE_BLUE_PROFESSIONAL:
-            blue_prof_coordinator = BlueProfCoordinator(ha, DOMAIN, grohe_device, api, polling, log_response_data)
+            blue_prof_coordinator = BlueProfCoordinator(
+                ha, DOMAIN, grohe_device, api, polling, log_response_data
+            )
             coordinators[grohe_device.appliance_id] = blue_prof_coordinator
 
     # Add a generic profile coordinator so that we can use general data for the user profile as well
@@ -97,7 +142,13 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Store devices and login information into hass object
     ha.data[DOMAIN] = {}
-    ha.data[DOMAIN][entry.entry_id] = {'session': api, 'devices': devices, 'coordinator': coordinators, 'notifications': notifications, 'config': config}
+    ha.data[DOMAIN][entry.entry_id] = {
+        "session": api,
+        "devices": devices,
+        "coordinator": coordinators,
+        "notifications": notifications,
+        "config": config,
+    }
 
     await ha.config_entries.async_forward_entry_setups(entry, CONF_PLATFORM)
 
@@ -106,12 +157,17 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     ####### OPTIONS - FLOW RELOAD ######################################################################################
     async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         _LOGGER.debug("Updating Grohe Sense options")
-        polling = config_entry.options.get('polling', 300)
-        request_timeout = config_entry.options.get('request_timeout', 10)
-        connect_timeout = config_entry.options.get('connect_timeout', 5)
-        log_response_data = config_entry.options.get('log_response_data', False)
+        polling = config_entry.options.get("polling", 300)
+        # Options
+        network_options = entry.options.get("network_options", {})
+        logging_options = entry.options.get("logging_options", {})
+        request_timeout = network_options.get("request_timeout", 10)
+        connect_timeout = network_options.get("connect_timeout", 5)
+        log_response_data = logging_options.get("log_response_data", False)
 
-        httpx_client_ha.timeout = httpx.Timeout(request_timeout, connect=connect_timeout)
+        httpx_client_ha.timeout = httpx.Timeout(
+            request_timeout, connect=connect_timeout
+        )
 
         for entity in hass.data[DOMAIN].values():
             for coordinator in entity["coordinator"].values():
@@ -123,23 +179,31 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
 
     ####### SERVICES ###################################################################################################
     async def handle_dashboard_export(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Export data for params: %s', call.data)
+        _LOGGER.debug("Export data for params: %s", call.data)
         try:
             return await api.get_dashboard()
         except Exception as e:
             raise HomeAssistantError(str(e))
 
     async def handle_get_appliance_data(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get data for params: %s', call.data)
+        _LOGGER.debug("Get data for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
-        group_by_str = call.data.get('group_by').lower() if call.data.get('group_by') else None
-        date_from_in = call.data.get('date_from') if call.data.get('date_from') else None
-        date_to_in = call.data.get('date_to') if call.data.get('date_to') else None
+        group_by_str = (
+            call.data.get("group_by").lower() if call.data.get("group_by") else None
+        )
+        date_from_in = (
+            call.data.get("date_from") if call.data.get("date_from") else None
+        )
+        date_to_in = call.data.get("date_to") if call.data.get("date_to") else None
 
         if device:
             try:
                 if group_by_str is None:
-                    group_by = GroheGroupBy.DAY if device.type == GroheTypes.GROHE_SENSE else GroheGroupBy.HOUR
+                    group_by = (
+                        GroheGroupBy.DAY
+                        if device.type == GroheTypes.GROHE_SENSE
+                        else GroheGroupBy.HOUR
+                    )
                 else:
                     group_by = GroheGroupBy(group_by_str)
 
@@ -153,33 +217,43 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
                 else:
                     date_to = datetime.strptime(date_to_in, "%Y-%m-%d")
 
-                return await api.get_appliance_data(device.location_id, device.room_id, device.appliance_id,
-                                                    date_from,
-                                                    date_to, group_by, False)
+                return await api.get_appliance_data(
+                    device.location_id,
+                    device.room_id,
+                    device.appliance_id,
+                    date_from,
+                    date_to,
+                    group_by,
+                    False,
+                )
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device not found')
+            raise HomeAssistantError("Device not found")
 
     async def handle_get_appliance_details(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get details for params: %s', call.data)
+        _LOGGER.debug("Get details for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
             try:
-                return await api.get_appliance_details(device.location_id, device.room_id, device.appliance_id)
+                return await api.get_appliance_details(
+                    device.location_id, device.room_id, device.appliance_id
+                )
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device not found')
+            raise HomeAssistantError("Device not found")
 
     async def handle_get_appliance_command(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get possible commands for params: %s', call.data)
+        _LOGGER.debug("Get possible commands for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
             try:
-                data = await api.get_appliance_command(device.location_id, device.room_id, device.appliance_id)
+                data = await api.get_appliance_command(
+                    device.location_id, device.room_id, device.appliance_id
+                )
                 if data is None:
                     return {}
                 else:
@@ -187,17 +261,23 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device not found')
+            raise HomeAssistantError("Device not found")
 
     async def handle_set_appliance_command(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Set commands for params: %s', call.data)
+        _LOGGER.debug("Set commands for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
-        commands = call.data.get('commands')
+        commands = call.data.get("commands")
 
-        data_to_send = {'command': commands}
+        data_to_send = {"command": commands}
         if device:
             try:
-                data = await api.set_appliance_command(device.location_id, device.room_id, device.appliance_id, device.type, data_to_send)
+                data = await api.set_appliance_command(
+                    device.location_id,
+                    device.room_id,
+                    device.appliance_id,
+                    device.type,
+                    data_to_send,
+                )
                 if data is None:
                     return {}
                 else:
@@ -205,20 +285,33 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device not found')
+            raise HomeAssistantError("Device not found")
 
     async def handle_tap_water(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Tap water for params: %s', call.data)
+        _LOGGER.debug("Tap water for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
-        water_type = call.data.get('water_type')
-        water_amount = call.data.get('amount')
+        water_type = call.data.get("water_type")
+        water_amount = call.data.get("amount")
 
-
-        if device and (device.type == GroheTypes.GROHE_BLUE_HOME or device.type == GroheTypes.GROHE_BLUE_PROFESSIONAL):
+        if device and (
+            device.type == GroheTypes.GROHE_BLUE_HOME
+            or device.type == GroheTypes.GROHE_BLUE_PROFESSIONAL
+        ):
             try:
                 mapped_water_type = GroheTapType[water_type.upper()]
-                data_to_send = {'command': {'tap_type': mapped_water_type.value, 'tap_amount': water_amount}}
-                data = await api.set_appliance_command(device.location_id, device.room_id, device.appliance_id, device.type, data_to_send)
+                data_to_send = {
+                    "command": {
+                        "tap_type": mapped_water_type.value,
+                        "tap_amount": water_amount,
+                    }
+                }
+                data = await api.set_appliance_command(
+                    device.location_id,
+                    device.room_id,
+                    device.appliance_id,
+                    device.type,
+                    data_to_send,
+                )
                 if data is None:
                     return {}
                 else:
@@ -226,71 +319,83 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError("Device does not exist or device is not a Grohe Blue Home or Grohe Blue Professional device")
+            raise HomeAssistantError(
+                "Device does not exist or device is not a Grohe Blue Home or Grohe Blue Professional device"
+            )
 
     async def handle_get_appliance_status(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get status for params: %s', call.data)
+        _LOGGER.debug("Get status for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
             try:
-                data = await api.get_appliance_status(device.location_id, device.room_id, device.appliance_id)
+                data = await api.get_appliance_status(
+                    device.location_id, device.room_id, device.appliance_id
+                )
                 if data is None:
                     return {}
                 elif isinstance(data, list) and len(data) > 0:
-                    return { 'status': data }
+                    return {"status": data}
                 else:
                     return data
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device not found')
+            raise HomeAssistantError("Device not found")
 
     async def handle_get_appliance_notifications(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get notifications for params: %s', call.data)
+        _LOGGER.debug("Get notifications for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
             try:
-                data = await api.get_appliance_notifications(device.location_id, device.room_id, device.appliance_id)
+                data = await api.get_appliance_notifications(
+                    device.location_id, device.room_id, device.appliance_id
+                )
 
                 if data is None:
                     return {}
                 elif isinstance(data, list) and len(data) > 0:
                     return {
-                        'notifications': [dict(notification) for notification in data]
+                        "notifications": [dict(notification) for notification in data]
                     }
                 else:
                     return {}
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device not found')
+            raise HomeAssistantError("Device not found")
 
-    async def handle_get_appliance_pressure_measurement(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get pressure measurement for params: %s', call.data)
+    async def handle_get_appliance_pressure_measurement(
+        call: ServiceCall,
+    ) -> ServiceResponse:
+        _LOGGER.debug("Get pressure measurement for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device:
             try:
-                data = await api.get_appliance_pressure_measurement(device.location_id, device.room_id, device.appliance_id)
+                data = await api.get_appliance_pressure_measurement(
+                    device.location_id, device.room_id, device.appliance_id
+                )
 
                 if data is None:
                     return {}
                 elif isinstance(data, list) and len(data) > 0:
                     return {
-                        'pressure_measurements': [dict(measurement) for measurement in data]
+                        "pressure_measurements": [
+                            dict(measurement) for measurement in data
+                        ]
                     }
                 else:
                     return data
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device not found')
+            raise HomeAssistantError("Device not found")
 
     async def handle_get_profile_notifications(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Get profile notifications for params: %s', call.data)
-        limit = call.data.get('limit')
+        _LOGGER.debug("Get profile notifications for params: %s", call.data)
+        limit = call.data.get("limit")
         if limit is None:
             limit = 50
 
@@ -300,22 +405,22 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             if data is None:
                 return {}
             elif isinstance(data, list) and len(data) > 0:
-                return {
-                    'notifications': [dict(notification) for notification in data]
-                }
+                return {"notifications": [dict(notification) for notification in data]}
             else:
                 return data
         except Exception as e:
             raise HomeAssistantError(str(e))
 
     async def handle_set_snooze(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Set snooze for params: %s', call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get('device_id')[0])
-        duration = call.data.get('duration')
+        _LOGGER.debug("Set snooze for params: %s", call.data)
+        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        duration = call.data.get("duration")
 
         if device and (device.type == GroheTypes.GROHE_SENSE_GUARD):
             try:
-                data = await api.set_snooze(device.location_id, device.room_id, device.appliance_id, duration)
+                data = await api.set_snooze(
+                    device.location_id, device.room_id, device.appliance_id, duration
+                )
                 if data is None:
                     return {}
                 else:
@@ -323,15 +428,19 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device does not exist or device is not a Grohe Sense Guard device')
+            raise HomeAssistantError(
+                "Device does not exist or device is not a Grohe Sense Guard device"
+            )
 
     async def handle_disable_snooze(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Disable snooze for params: %s', call.data)
+        _LOGGER.debug("Disable snooze for params: %s", call.data)
         device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
 
         if device and (device.type == GroheTypes.GROHE_SENSE_GUARD):
             try:
-                data = await api.disable_snooze(device.location_id, device.room_id, device.appliance_id)
+                data = await api.disable_snooze(
+                    device.location_id, device.room_id, device.appliance_id
+                )
                 if data is None:
                     return {}
                 else:
@@ -339,14 +448,16 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as e:
                 raise HomeAssistantError(str(e))
         else:
-            raise HomeAssistantError('Device does not exist or device is not a Grohe Sense Guard device')
+            raise HomeAssistantError(
+                "Device does not exist or device is not a Grohe Sense Guard device"
+            )
 
     async def handle_login_and_get_tokens(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug('Login and get tokens for params: %s', call.data)
-        username = call.data.get('username')
-        password = call.data.get('password')
+        _LOGGER.debug("Login and get tokens for params: %s", call.data)
+        username = call.data.get("username")
+        password = call.data.get("password")
         if username is None or password is None:
-            raise HomeAssistantError('Username and password are required')
+            raise HomeAssistantError("Username and password are required")
 
         httpx_client_temp = httpx_client.get_async_client(ha)
         httpx_client_temp.cookies.clear()
@@ -360,164 +471,178 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
 
         tokens = temp_api.get_tokens()
 
-        return {'tokens': tokens.to_dict(), 'dashboard': dashboard}
+        return {"tokens": tokens.to_dict(), "dashboard": dashboard}
 
-
-    ha.services.async_register(DOMAIN, 'get_dashboard', handle_dashboard_export, schema=None, supports_response=SupportsResponse.ONLY)
     ha.services.async_register(
         DOMAIN,
-        'get_tokens_from_username',
+        "get_dashboard",
+        handle_dashboard_export,
+        schema=None,
+        supports_response=SupportsResponse.ONLY,
+    )
+    ha.services.async_register(
+        DOMAIN,
+        "get_tokens_from_username",
         handle_login_and_get_tokens,
-        schema=voluptuous.Schema({
-            voluptuous.Required('username'): str,
-            voluptuous.Required('password'): str,
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("username"): str,
+                voluptuous.Required("password"): str,
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'get_appliance_data',
+        "get_appliance_data",
         handle_get_appliance_data,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-            voluptuous.Optional('group_by'): str,
-            voluptuous.Optional('date_from'): str,
-            voluptuous.Optional('date_to'): str,
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                voluptuous.Optional("group_by"): str,
+                voluptuous.Optional("date_from"): str,
+                voluptuous.Optional("date_to"): str,
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'get_appliance_details',
+        "get_appliance_details",
         handle_get_appliance_details,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'get_appliance_command',
+        "get_appliance_command",
         handle_get_appliance_command,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'get_appliance_status',
+        "get_appliance_status",
         handle_get_appliance_status,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'get_appliance_notifications',
+        "get_appliance_notifications",
         handle_get_appliance_notifications,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'get_appliance_pressure_measurement',
+        "get_appliance_pressure_measurement",
         handle_get_appliance_pressure_measurement,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'set_appliance_command',
+        "set_appliance_command",
         handle_set_appliance_command,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-            voluptuous.Required('commands'): dict,
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                voluptuous.Required("commands"): dict,
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'get_profile_notifications',
+        "get_profile_notifications",
         handle_get_profile_notifications,
-        schema=voluptuous.Schema({
-            voluptuous.Optional('limit'): int,
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Optional("limit"): int,
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'tap_water',
+        "tap_water",
         handle_tap_water,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-            voluptuous.Required('water_type'): str,
-            voluptuous.Required('amount'): int,
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                voluptuous.Required("water_type"): str,
+                voluptuous.Required("amount"): int,
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'set_snooze',
+        "set_snooze",
         handle_set_snooze,
-        schema=voluptuous.Schema({
-            voluptuous.Optional('duration'): int,
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Optional("duration"): int,
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     ha.services.async_register(
         DOMAIN,
-        'disable_snooze',
+        "disable_snooze",
         handle_disable_snooze,
-        schema=voluptuous.Schema({
-            voluptuous.Required('device_id'): All(
-                [str],
-                Length(min=1)
-            ),
-        }),
-        supports_response=SupportsResponse.ONLY)
+        schema=voluptuous.Schema(
+            {
+                voluptuous.Required("device_id"): All([str], Length(min=1)),
+            }
+        ),
+        supports_response=SupportsResponse.ONLY,
+    )
 
     return True
+
 
 async def async_remove_config_entry_device(
     ha: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
 ) -> bool:
     try:
         _LOGGER.debug("Removing Grohe SmartHome device %s", device_entry.id)
-        devices: List[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get("devices")
+        devices: List[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get(
+            "devices"
+        )
 
         device_found = False
         for device in devices:
@@ -525,14 +650,26 @@ async def async_remove_config_entry_device(
                 device_found = True
                 _LOGGER.debug("Removing device %s", device.appliance_id)
 
-        devices[:] = [device for device in devices if not any(device.appliance_id in t for t in device_entry.identifiers)]
+        devices[:] = [
+            device
+            for device in devices
+            if not any(device.appliance_id in t for t in device_entry.identifiers)
+        ]
 
-        _LOGGER.debug("All remaining device %s", str(ha.data[DOMAIN][config_entry.entry_id].get("devices")))
+        _LOGGER.debug(
+            "All remaining device %s",
+            str(ha.data[DOMAIN][config_entry.entry_id].get("devices")),
+        )
 
         if not device_found:
-            _LOGGER.warning('Tried to remove Grohe SmartHome device %s, but it was not found in the list of actual devices.', device_entry.name)
+            _LOGGER.warning(
+                "Tried to remove Grohe SmartHome device %s, but it was not found in the list of actual devices.",
+                device_entry.name,
+            )
 
         return True
     except Exception as e:
-        _LOGGER.error("Error removing Grohe SmartHome device %s: %s", device_entry.id, str(e))
+        _LOGGER.error(
+            "Error removing Grohe SmartHome device %s: %s", device_entry.id, str(e)
+        )
         return False

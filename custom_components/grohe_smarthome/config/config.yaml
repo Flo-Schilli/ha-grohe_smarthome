@@ -256,6 +256,12 @@ devices:
           category: 'Diagnostic'
           enabled: true
 
+        - name: 'Last measurement update'
+          keypath: 'details.data_latest.measurement.timestamp'
+          device_class: 'Timestamp'
+          category: 'Diagnostic'
+          enabled: true
+
       binary_sensors:
         - name: 'Update available'
           keypath: 'status.update_available'
