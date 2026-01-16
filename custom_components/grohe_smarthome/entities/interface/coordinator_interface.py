@@ -18,3 +18,7 @@ class CoordinatorInterface:
     @abstractmethod
     def set_log_response_data(self, log_response_data: bool) -> None:
         raise NotImplementedError
+
+    @abstractmethod
+    async def async_config_entry_first_refresh(self) -> None:
+        raise NotImplementedError

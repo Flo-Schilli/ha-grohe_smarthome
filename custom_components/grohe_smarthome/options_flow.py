@@ -41,12 +41,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                                 {
                                     vol.Required(
                                         "request_timeout",
-                                        "Set a custom custom request timeout in seconds (for httpx).",
+                                        "Set a custom request timeout in seconds (for httpx).",
                                         10,
                                     ): config_validation.positive_int,
                                     vol.Required(
                                         "connect_timeout",
-                                        "Set a custom custom connect timeout in seconds (for httpx).",
+                                        "Set a custom connect timeout in seconds (for httpx).",
                                         5,
                                     ): config_validation.positive_int,
                                 }

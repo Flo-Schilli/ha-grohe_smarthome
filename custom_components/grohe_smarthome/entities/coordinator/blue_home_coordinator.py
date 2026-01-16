@@ -1,5 +1,7 @@
+"""Coordinator for Grohe Blue Home devices."""
+
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import Any, cast
 
@@ -27,6 +29,8 @@ class BlueHomeCoordinator(
     CoordinatorInterface,
     CoordinatorButtonInterface,
 ):
+    """Coordinator for Grohe Blue Home devices."""
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -36,6 +40,7 @@ class BlueHomeCoordinator(
         polling: int = 300,
         log_response_data: bool = False,
     ) -> None:
+        """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
@@ -59,6 +64,10 @@ class BlueHomeCoordinator(
         # Integration polling has in options min 40s
         self._update_timeout = 30
         self._poll_interval = 10
+
+    async def _get_data(self) -> dict[str, Any]:
+        """Get data from the device."""
+        return await self._fetch_device_data()
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Non-blocking data fetch."""
@@ -213,7 +222,7 @@ class BlueHomeCoordinator(
                 )
                 return
 
-    def _extract_timestamp(self, data: dict[str, Any]):
+    def _extract_timestamp(self, data: dict[str, Any]) -> datetime | None:
         """Extracts the timestamp from the device data."""
         if not data:
             return None

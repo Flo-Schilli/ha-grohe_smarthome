@@ -1,62 +1,54 @@
+"""initialize Grohe SmartHome component."""
+
+from datetime import datetime, timedelta
 import logging
 import os.path
-from datetime import datetime, timedelta
-from typing import List, Dict
 
-import httpx
-from homeassistant.helpers.device_registry import DeviceEntry
-from homeassistant.helpers.storage import Store
-import voluptuous
-from voluptuous import All, Length
-
-from grohe import GroheClient, GroheGroupBy, GroheTypes, GroheTapType
-
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-    HomeAssistantError,
-)
-from homeassistant.helpers import device_registry, httpx_client
 from custom_components.grohe_smarthome.const import (
-    DOMAIN,
-    CONF_USERNAME,
     CONF_PASSWORD,
     CONF_PLATFORM,
+    CONF_USERNAME,
+    DOMAIN,
 )
 from custom_components.grohe_smarthome.dto.config_dtos import ConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.entities.config_loader import ConfigLoader
-from custom_components.grohe_smarthome.entities.coordinator.blue_home_coordinator import (
+from custom_components.grohe_smarthome.entities.coordinator import (
     BlueHomeCoordinator,
-)
-from custom_components.grohe_smarthome.entities.coordinator.blue_prof_coordinator import (
     BlueProfCoordinator,
-)
-from custom_components.grohe_smarthome.entities.coordinator.guard_coordinator import (
     GuardCoordinator,
-)
-from custom_components.grohe_smarthome.entities.coordinator.profile_coordinator import (
     ProfileCoordinator,
-)
-from custom_components.grohe_smarthome.entities.coordinator.sense_coordinator import (
     SenseCoordinator,
 )
 from custom_components.grohe_smarthome.entities.entity_helper import EntityHelper
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
     CoordinatorInterface,
 )
+from grohe import GroheClient, GroheGroupBy, GroheTapType, GroheTypes
+import httpx
+import voluptuous as vol
+from voluptuous import All, Length
 
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import (
+    HomeAssistant,
+    HomeAssistantError,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
+from homeassistant.helpers import device_registry as dr, httpx_client
+from homeassistant.helpers.device_registry import DeviceEntry
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def find_device_by_device_id(
-    hass: HomeAssistant, devices: List[GroheDevice], device_id: str
+    hass: HomeAssistant, devices: list[GroheDevice], device_id: str
 ) -> GroheDevice:
-    registry = device_registry.async_get(hass)
+    """Find Grohe device by device id."""
+
+    registry = dr.async_get(hass)
     entry = registry.async_get(device_id)
     grohe_appliance_id = next(iter(entry.identifiers))[1]
     return next(
@@ -66,6 +58,8 @@ def find_device_by_device_id(
 
 
 async def async_unload_entry(ha: HomeAssistant, entry: ConfigEntry):
+    """Unload a config entry."""
+
     _LOGGER.debug("Unloading Grohe Entry")
     unload_ok = await ha.config_entries.async_unload_platforms(entry, CONF_PLATFORM)
 
@@ -76,6 +70,8 @@ async def async_unload_entry(ha: HomeAssistant, entry: ConfigEntry):
 
 
 async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Grohe SmartHome from a config entry."""
+
     _LOGGER.debug("Loading Grohe Entry")
 
     config_loader = ConfigLoader(os.path.join(os.path.dirname(__file__), "config"))
@@ -95,16 +91,20 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
 
     httpx_client_ha.timeout = httpx.Timeout(request_timeout, connect=connect_timeout)
 
-    api = GroheClient(
-        entry.data.get("username"), entry.data.get("password"), httpx_client_ha, 120
-    )
+    username = entry.data.get(CONF_USERNAME)
+    password = entry.data.get(CONF_PASSWORD)
+
+    if not username or not password:
+        raise HomeAssistantError("Username and password are required")
+
+    api = GroheClient(username, password, httpx_client_ha, 120)
     await api.login()
 
     # Get all devices available
-    devices: List[GroheDevice] = await GroheDevice.get_devices(api)
+    devices: list[GroheDevice] = await GroheDevice.get_devices(api)
 
     polling = entry.options.get("polling", 300)
-    coordinators: Dict[str, CoordinatorInterface] = {}
+    coordinators: dict[str, CoordinatorInterface] = {}
     for grohe_device in devices:
         if grohe_device.type == GroheTypes.GROHE_SENSE:
             sense_coordinator = SenseCoordinator(
@@ -152,15 +152,22 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await ha.config_entries.async_forward_entry_setups(entry, CONF_PLATFORM)
 
+    _LOGGER.debug("Starting first refresh for all coordinators")
     await profile_coordinator.async_config_entry_first_refresh()
+
+    for coordinator in coordinators.values():
+        if coordinator != profile_coordinator:  # Evitiamo di chiamarlo due volte
+            await coordinator.async_config_entry_first_refresh()
+
+    _LOGGER.debug("All coordinators initialized with fresh data")
 
     ####### OPTIONS - FLOW RELOAD ######################################################################################
     async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         _LOGGER.debug("Updating Grohe Sense options")
         polling = config_entry.options.get("polling", 300)
         # Options
-        network_options = entry.options.get("network_options", {})
-        logging_options = entry.options.get("logging_options", {})
+        network_options = config_entry.options.get("network_options", {})
+        logging_options = config_entry.options.get("logging_options", {})
         request_timeout = network_options.get("request_timeout", 10)
         connect_timeout = network_options.get("connect_timeout", 5)
         log_response_data = logging_options.get("log_response_data", False)
@@ -484,10 +491,10 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_tokens_from_username",
         handle_login_and_get_tokens,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("username"): str,
-                voluptuous.Required("password"): str,
+                vol.Required("username"): str,
+                vol.Required("password"): str,
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -497,12 +504,12 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_appliance_data",
         handle_get_appliance_data,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
-                voluptuous.Optional("group_by"): str,
-                voluptuous.Optional("date_from"): str,
-                voluptuous.Optional("date_to"): str,
+                vol.Required("device_id"): All([str], Length(min=1)),
+                vol.Optional("group_by"): str,
+                vol.Optional("date_from"): str,
+                vol.Optional("date_to"): str,
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -512,9 +519,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_appliance_details",
         handle_get_appliance_details,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                vol.Required("device_id"): All([str], Length(min=1)),
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -524,9 +531,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_appliance_command",
         handle_get_appliance_command,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                vol.Required("device_id"): All([str], Length(min=1)),
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -536,9 +543,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_appliance_status",
         handle_get_appliance_status,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                vol.Required("device_id"): All([str], Length(min=1)),
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -548,9 +555,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_appliance_notifications",
         handle_get_appliance_notifications,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                vol.Required("device_id"): All([str], Length(min=1)),
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -560,9 +567,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_appliance_pressure_measurement",
         handle_get_appliance_pressure_measurement,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                vol.Required("device_id"): All([str], Length(min=1)),
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -572,10 +579,10 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "set_appliance_command",
         handle_set_appliance_command,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
-                voluptuous.Required("commands"): dict,
+                vol.Required("device_id"): All([str], Length(min=1)),
+                vol.Required("commands"): dict,
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -585,9 +592,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "get_profile_notifications",
         handle_get_profile_notifications,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Optional("limit"): int,
+                vol.Optional("limit"): int,
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -597,11 +604,11 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "tap_water",
         handle_tap_water,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
-                voluptuous.Required("water_type"): str,
-                voluptuous.Required("amount"): int,
+                vol.Required("device_id"): All([str], Length(min=1)),
+                vol.Required("water_type"): str,
+                vol.Required("amount"): int,
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -611,10 +618,10 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "set_snooze",
         handle_set_snooze,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Optional("duration"): int,
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                vol.Optional("duration"): int,
+                vol.Required("device_id"): All([str], Length(min=1)),
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -624,9 +631,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         "disable_snooze",
         handle_disable_snooze,
-        schema=voluptuous.Schema(
+        schema=vol.Schema(
             {
-                voluptuous.Required("device_id"): All([str], Length(min=1)),
+                vol.Required("device_id"): All([str], Length(min=1)),
             }
         ),
         supports_response=SupportsResponse.ONLY,
@@ -640,7 +647,7 @@ async def async_remove_config_entry_device(
 ) -> bool:
     try:
         _LOGGER.debug("Removing Grohe SmartHome device %s", device_entry.id)
-        devices: List[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get(
+        devices: list[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get(
             "devices"
         )
 
@@ -663,11 +670,12 @@ async def async_remove_config_entry_device(
 
         if not device_found:
             _LOGGER.warning(
-                "Tried to remove Grohe SmartHome device %s, but it was not found in the list of actual devices.",
+                "Tried to remove Grohe SmartHome device %s, but it was not found in the list of actual devices",
                 device_entry.name,
             )
 
         return True
+
     except Exception as e:
         _LOGGER.error(
             "Error removing Grohe SmartHome device %s: %s", device_entry.id, str(e)
