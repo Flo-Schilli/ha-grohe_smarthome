@@ -18,7 +18,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Schema(
                     {
                         vol.Required(
-                            "polling", "Set a custom polling interval in seconds.", 300
+                            "polling", "Set a custom polling interval in seconds.", 900
                         ): vol.All(
                             config_validation.positive_int,
                             vol.Range(
