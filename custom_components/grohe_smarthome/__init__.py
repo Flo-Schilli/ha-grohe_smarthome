@@ -103,7 +103,7 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     # Get all devices available
     devices: list[GroheDevice] = await GroheDevice.get_devices(api)
 
-    polling = entry.options.get("polling", 300)
+    polling = entry.options.get("polling", 900)
     coordinators: dict[str, CoordinatorInterface] = {}
     for grohe_device in devices:
         if grohe_device.type == GroheTypes.GROHE_SENSE:
