@@ -70,7 +70,7 @@ devices:
         - name: 'Total water consumption'
           keypath: 'total_water_consumption'
           device_class: 'Water'
-          state_class: 'Total'
+          state_class: 'Total Increasing'
           unit: 'Liters'
         - name: 'Average daily consumption'
           keypath: 'details.data_latest.average_daily_consumption'

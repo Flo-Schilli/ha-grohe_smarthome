@@ -118,6 +118,12 @@ class Sensor(CoordinatorEntity, SensorEntity):
         if self._coordinator is not None and self._coordinator.data is not None and self._sensor.keypath is not None:
             # We do have some data here, so let's extract it
             value = self._get_value(self._coordinator.data)
+            
+            # Ignore 0 or None for Total water consumption to prevent massive spikes when API fails
+            if self._sensor.name == 'Total water consumption' and (value == 0 or value is None):
+                _LOGGER.warning(f'Device {self._device.name} returned 0 or None for {self._sensor.name}. Ignoring to prevent data spikes.')
+                return
+
             _LOGGER.debug(
                 f'Device: {self._device.name} ({self._device.appliance_id}) with sensor name: "{self._sensor.name}" has the following value on keypath "{self._sensor.keypath}": {value}')
 
