@@ -16,6 +16,13 @@ from ...dto.config_dtos import SensorDto, NotificationsDto, ConfigSpecialType
 _LOGGER = logging.getLogger(__name__)
 DATETIME_DIFF_SECONDS = 60
 
+# The Grohe app caps the remaining filter percentage on a fixed lifetime so the
+# user is prompted to replace the filter roughly once a year, showing the lower
+# of the API value and this time based value. Keypath to the replacement date is
+# relative to the sensor data (details.data_latest.measurement).
+FILTER_LIFETIME_DAYS = 360
+FILTER_REPLACEMENT_KEYPATH = 'details.data_latest.measurement.date_of_filter_replacement'
+
 class Sensor(CoordinatorEntity, SensorEntity):
     def __init__(self, domain: str, coordinator: DataUpdateCoordinator, device: GroheDevice, sensor: SensorDto,
                  notification_config: NotificationsDto, initial_value: Dict[str, any] = None):
@@ -110,8 +117,26 @@ class Sensor(CoordinatorEntity, SensorEntity):
                     value = 'No actual notification'
                 elif self._sensor.special_type == ConfigSpecialType.ACCUMULATED_WATER and value is not None:
                     value = value + data.get('total_water_consumption')
+                elif self._sensor.special_type == ConfigSpecialType.FILTER_REMAINING_ADJUSTED and value is not None:
+                    value = self._adjust_filter_remaining(value, data)
 
             return value
+
+    def _adjust_filter_remaining(self, api_value: float, data: benedict) -> float:
+        """Mirror the Grohe app which caps the remaining filter percentage on a fixed
+        lifetime and shows the lower of the API value and this time based value."""
+        replacement_date = data.get(FILTER_REPLACEMENT_KEYPATH)
+        if replacement_date is None:
+            return api_value
+
+        try:
+            days_since_replacement = (datetime.now().astimezone() - datetime.fromisoformat(replacement_date)).total_seconds() / 86400
+        except (ValueError, TypeError):
+            _LOGGER.warning(f'Device: {self._device.name} ({self._device.appliance_id}) could not parse filter replacement date "{replacement_date}", using raw filter value')
+            return api_value
+
+        time_based_value = 100 - (days_since_replacement / FILTER_LIFETIME_DAYS * 100)
+        return max(0, round(min(api_value, time_based_value)))
 
     @callback
     def _handle_coordinator_update(self) -> None:

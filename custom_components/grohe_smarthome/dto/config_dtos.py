@@ -40,6 +40,7 @@ class ConfigSpecialType(Enum):
     ACCUMULATED_WATER = 'Accumulated Water'
     NOTIFICATION = 'Notification'
     DURATION_AS_TIMESTAMP = 'Duration as Timestamp'
+    FILTER_REMAINING_ADJUSTED = 'Filter Remaining Adjusted'
 
 @dataclass_json
 @dataclass
