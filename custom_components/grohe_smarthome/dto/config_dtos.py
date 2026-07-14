@@ -55,6 +55,7 @@ class SensorDto:
     special_type: Optional[ConfigSpecialType] = None
     min_version: Optional[str] = None
     enum: Optional[str] = None
+    icon: Optional[str] = None
 
 @dataclass_json
 @dataclass
