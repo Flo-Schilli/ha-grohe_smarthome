@@ -60,6 +60,9 @@ class Sensor(CoordinatorEntity, SensorEntity):
         if self._sensor.state_class is not None:
             self._attr_state_class = SensorStateClass(self._sensor.state_class.lower().replace(" ", "_"))
 
+        if self._sensor.icon is not None:
+            self._attr_icon = self._sensor.icon
+
     @property
     def device_info(self) -> DeviceInfo | None:
         return DeviceInfo(identifiers={(self._domain, self._device.appliance_id)},
