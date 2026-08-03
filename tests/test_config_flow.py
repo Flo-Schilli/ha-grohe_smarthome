@@ -84,6 +84,70 @@ async def test_user_step_aborts_on_duplicate_entry(hass):
     assert result2["reason"] == "already_configured"
 
 
+async def test_reauth_step_updates_existing_entry(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="GroheSmarthome",
+        data={CONF_USERNAME: "old@example.com", CONF_PASSWORD: "old-pass"},
+    )
+    entry.add_to_hass(hass)
+
+    with patch(GROHE_CLIENT_PATH, return_value=_mock_grohe_client()):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=entry.data,
+        )
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reauth_confirm"
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "new@example.com", CONF_PASSWORD: "new-pass"},
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data == {
+        CONF_USERNAME: "new@example.com",
+        CONF_PASSWORD: "new-pass",
+    }
+
+
+async def test_reauth_step_invalid_credentials_keeps_old_entry(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="GroheSmarthome",
+        data={CONF_USERNAME: "old@example.com", CONF_PASSWORD: "old-pass"},
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        GROHE_CLIENT_PATH,
+        return_value=_mock_grohe_client(login_side_effect=RuntimeError("nope")),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=entry.data,
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: "new@example.com", CONF_PASSWORD: "wrong"},
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert entry.data == {CONF_USERNAME: "old@example.com", CONF_PASSWORD: "old-pass"}
+
+
 async def test_reconfigure_step_updates_existing_entry(hass):
     entry = MockConfigEntry(
         domain=DOMAIN,
