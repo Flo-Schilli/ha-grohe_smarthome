@@ -18,6 +18,7 @@ from voluptuous import All, Length
 
 from custom_components.grohe_smarthome.const import DOMAIN
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
+from custom_components.grohe_smarthome.dto.runtime_data import GroheRuntimeData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,13 +37,25 @@ def find_device_by_device_id(
     )
 
 
-def async_register_services(
-    ha: HomeAssistant, api: GroheClient, devices: list[GroheDevice]
-) -> None:
-    """Register all Grohe SmartHome services."""
+def _get_runtime_data(ha: HomeAssistant) -> GroheRuntimeData:
+    """Return the runtime data of the loaded Grohe SmartHome entry."""
+
+    entries = ha.config_entries.async_entries(DOMAIN)
+    if not entries:
+        raise HomeAssistantError("No Grohe SmartHome integration configured")
+    return entries[0].runtime_data
+
+
+def async_register_services(ha: HomeAssistant) -> None:
+    """Register all Grohe SmartHome services.
+
+    Called once from async_setup, so handlers must resolve the current
+    session/devices per call rather than closing over them.
+    """
 
     async def handle_dashboard_export(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Export data for params: %s", call.data)
+        api = _get_runtime_data(ha).session
         try:
             return await api.get_dashboard()
         except Exception as e:
@@ -50,7 +63,11 @@ def async_register_services(
 
     async def handle_get_appliance_data(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Get data for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
         group_by_str = (
             call.data.get("group_by").lower() if call.data.get("group_by") else None
         )
@@ -96,7 +113,11 @@ def async_register_services(
 
     async def handle_get_appliance_details(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Get details for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
 
         if device:
             try:
@@ -110,7 +131,11 @@ def async_register_services(
 
     async def handle_get_appliance_command(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Get possible commands for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
 
         if device:
             try:
@@ -128,7 +153,11 @@ def async_register_services(
 
     async def handle_set_appliance_command(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Set commands for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
         commands = call.data.get("commands")
 
         data_to_send = {"command": commands}
@@ -152,7 +181,11 @@ def async_register_services(
 
     async def handle_tap_water(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Tap water for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
         water_type = call.data.get("water_type")
         water_amount = call.data.get("amount")
 
@@ -188,7 +221,11 @@ def async_register_services(
 
     async def handle_get_appliance_status(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Get status for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
 
         if device:
             try:
@@ -208,7 +245,11 @@ def async_register_services(
 
     async def handle_get_appliance_notifications(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Get notifications for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
 
         if device:
             try:
@@ -233,7 +274,11 @@ def async_register_services(
         call: ServiceCall,
     ) -> ServiceResponse:
         _LOGGER.debug("Get pressure measurement for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
 
         if device:
             try:
@@ -258,6 +303,7 @@ def async_register_services(
 
     async def handle_get_profile_notifications(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Get profile notifications for params: %s", call.data)
+        api = _get_runtime_data(ha).session
         limit = call.data.get("limit")
         if limit is None:
             limit = 50
@@ -276,7 +322,11 @@ def async_register_services(
 
     async def handle_set_snooze(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Set snooze for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
         duration = call.data.get("duration")
 
         if device and (device.type == GroheTypes.GROHE_SENSE_GUARD):
@@ -297,7 +347,11 @@ def async_register_services(
 
     async def handle_disable_snooze(call: ServiceCall) -> ServiceResponse:
         _LOGGER.debug("Disable snooze for params: %s", call.data)
-        device = find_device_by_device_id(ha, devices, call.data.get("device_id")[0])
+        runtime_data = _get_runtime_data(ha)
+        api = runtime_data.session
+        device = find_device_by_device_id(
+            ha, runtime_data.devices, call.data.get("device_id")[0]
+        )
 
         if device and (device.type == GroheTypes.GROHE_SENSE_GUARD):
             try:

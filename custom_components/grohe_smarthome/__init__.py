@@ -5,10 +5,11 @@ import os.path
 
 import httpx
 from grohe import GroheClient, GroheTypes
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, HomeAssistantError
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import httpx_client
 from homeassistant.helpers.device_registry import DeviceEntry
+from homeassistant.helpers.typing import ConfigType
 
 from custom_components.grohe_smarthome.const import (
     CONF_PASSWORD,
@@ -18,6 +19,10 @@ from custom_components.grohe_smarthome.const import (
 )
 from custom_components.grohe_smarthome.dto.config_dtos import ConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
+from custom_components.grohe_smarthome.dto.runtime_data import (
+    GroheConfigEntry,
+    GroheRuntimeData,
+)
 from custom_components.grohe_smarthome.entities.config_loader import ConfigLoader
 from custom_components.grohe_smarthome.entities.coordinator import (
     BlueHomeCoordinator,
@@ -35,19 +40,21 @@ from custom_components.grohe_smarthome.services import async_register_services
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_unload_entry(ha: HomeAssistant, entry: ConfigEntry):
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Grohe SmartHome integration."""
+
+    async_register_services(hass)
+    return True
+
+
+async def async_unload_entry(ha: HomeAssistant, entry: GroheConfigEntry) -> bool:
     """Unload a config entry."""
 
     _LOGGER.debug("Unloading Grohe Entry")
-    unload_ok = await ha.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-    if unload_ok:
-        ha.data[DOMAIN].pop(entry.entry_id)
-
-    return unload_ok
+    return await ha.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(ha: HomeAssistant, entry: GroheConfigEntry) -> bool:
     """Set up Grohe SmartHome from a config entry."""
 
     _LOGGER.debug("Loading Grohe Entry")
@@ -73,13 +80,24 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     password = entry.data.get(CONF_PASSWORD)
 
     if not username or not password:
-        raise HomeAssistantError("Username and password are required")
+        raise ConfigEntryAuthFailed("Username and password are required")
 
     api = GroheClient(username, password, httpx_client_ha, 120)
-    await api.login()
+
+    try:
+        await api.login()
+    except httpx.HTTPError as err:
+        raise ConfigEntryNotReady(f"Could not connect to Grohe: {err}") from err
+    except Exception as err:
+        if "invalid username/password" in str(err).lower():
+            raise ConfigEntryAuthFailed("Invalid Grohe username or password") from err
+        raise ConfigEntryNotReady(f"Could not log in to Grohe: {err}") from err
 
     # Get all devices available
-    devices: list[GroheDevice] = await GroheDevice.get_devices(api)
+    try:
+        devices: list[GroheDevice] = await GroheDevice.get_devices(api)
+    except httpx.HTTPError as err:
+        raise ConfigEntryNotReady(f"Could not fetch Grohe devices: {err}") from err
 
     polling = entry.options.get("polling", 900)
     coordinators: dict[str, CoordinatorInterface] = {}
@@ -120,15 +138,13 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinators[api.user_id] = profile_coordinator
 
-    # Store devices and login information into hass object
-    ha.data[DOMAIN] = {}
-    ha.data[DOMAIN][entry.entry_id] = {
-        "session": api,
-        "devices": devices,
-        "coordinator": coordinators,
-        "notifications": notifications,
-        "config": config,
-    }
+    entry.runtime_data = GroheRuntimeData(
+        session=api,
+        devices=devices,
+        coordinator=coordinators,
+        notifications=notifications,
+        config=config,
+    )
 
     await ha.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -142,7 +158,9 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.debug("All coordinators initialized with fresh data")
 
     # Reload options on change
-    async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+    async def update_listener(
+        hass: HomeAssistant, config_entry: GroheConfigEntry
+    ) -> None:
         _LOGGER.debug("Updating Grohe Sense options")
         polling = config_entry.options.get("polling", 300)
         # Options
@@ -156,27 +174,23 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             request_timeout, connect=connect_timeout
         )
 
-        for entity in hass.data[DOMAIN].values():
-            for coordinator in entity["coordinator"].values():
+        for other_entry in hass.config_entries.async_entries(DOMAIN):
+            for coordinator in other_entry.runtime_data.coordinator.values():
                 coordinator.set_polling_interval(polling)
                 coordinator.set_log_response_data(log_response_data)
                 await coordinator.async_request_refresh()
 
     entry.async_on_unload(entry.add_update_listener(update_listener))
 
-    async_register_services(ha, api, devices)
-
     return True
 
 
 async def async_remove_config_entry_device(
-    ha: HomeAssistant, config_entry: ConfigEntry, device_entry: DeviceEntry
+    ha: HomeAssistant, config_entry: GroheConfigEntry, device_entry: DeviceEntry
 ) -> bool:
     try:
         _LOGGER.debug("Removing Grohe SmartHome device %s", device_entry.id)
-        devices: list[GroheDevice] = ha.data[DOMAIN][config_entry.entry_id].get(
-            "devices"
-        )
+        devices: list[GroheDevice] = config_entry.runtime_data.devices
 
         device_found = False
         for device in devices:
@@ -190,10 +204,7 @@ async def async_remove_config_entry_device(
             if not any(device.appliance_id in t for t in device_entry.identifiers)
         ]
 
-        _LOGGER.debug(
-            "All remaining device %s",
-            str(ha.data[DOMAIN][config_entry.entry_id].get("devices")),
-        )
+        _LOGGER.debug("All remaining devices: %s", devices)
 
         if not device_found:
             _LOGGER.warning(
