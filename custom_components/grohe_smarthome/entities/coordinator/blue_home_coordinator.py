@@ -1,11 +1,17 @@
 """Coordinator for Grohe Blue Home devices."""
 
 import asyncio
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 from typing import Any, cast
 
+import httpx
 from benedict import benedict
+from grohe import GroheClient
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util import dt as dt_util
+
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.dto.notification_dto import Notification
 from custom_components.grohe_smarthome.entities.interface.coordinator_button_interface import (
@@ -14,12 +20,6 @@ from custom_components.grohe_smarthome.entities.interface.coordinator_button_int
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
     CoordinatorInterface,
 )
-from grohe import GroheClient
-import httpx
-
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
