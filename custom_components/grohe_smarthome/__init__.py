@@ -137,7 +137,7 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinators[grohe_device.appliance_id] = blue_prof_coordinator
 
     # Add a generic profile coordinator so that we can use general data for the user profile as well
-    profile_coordinator = ProfileCoordinator(ha, DOMAIN, api, log_response_data)
+    profile_coordinator = ProfileCoordinator(ha, DOMAIN, api, polling, log_response_data)
     coordinators[api.user_id] = profile_coordinator
 
     # Store devices and login information into hass object

@@ -12,8 +12,8 @@ from custom_components.grohe_smarthome.entities.interface.coordinator_interface 
 _LOGGER = logging.getLogger(__name__)
 
 class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
-    def __init__(self, hass: HomeAssistant, domain: str, api: GroheClient, log_response_data: bool = False) -> None:
-        super().__init__(hass, _LOGGER, name='Grohe', update_interval=timedelta(seconds=900), always_update=True)
+    def __init__(self, hass: HomeAssistant, domain: str, api: GroheClient, polling: int = 900, log_response_data: bool = False) -> None:
+        super().__init__(hass, _LOGGER, name='Grohe', update_interval=timedelta(seconds=polling), always_update=True)
         self._api = api
         self._domain = domain
 

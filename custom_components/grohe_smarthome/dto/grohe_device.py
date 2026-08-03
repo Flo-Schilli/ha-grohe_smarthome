@@ -121,7 +121,7 @@ class GroheDevice:
                                                                 f'Appliance: {appliance.get('name')}, Appliance details: {appliance}')
                                             else:
                                                 devices.append(device)
-                                        except ValueError as e:
+                                        except Exception as e:
                                             _LOGGER.warning(f'Could not parse the following appliance as a GroheDevice: {appliance}. Error: {e}')
                                     else:
                                         _LOGGER.warning(f'Appliance {appliance_id} with name {appliance.get('name')} is not yet fully registered at Grohe. Skipping.')
