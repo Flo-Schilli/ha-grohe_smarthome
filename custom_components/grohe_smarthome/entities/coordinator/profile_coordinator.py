@@ -5,7 +5,7 @@ from datetime import datetime
 
 from grohe import GroheClient
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import CoordinatorInterface
 
@@ -45,6 +45,7 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
 
         except Exception as e:
             _LOGGER.error("Error updating Profile data: %s", str(e))
+            raise UpdateFailed(f"Error updating Profile data: {e}") from e
 
     async def _async_setup(self) -> None:
         await self._async_update_data()

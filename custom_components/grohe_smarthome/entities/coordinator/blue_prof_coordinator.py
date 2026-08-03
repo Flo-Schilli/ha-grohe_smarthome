@@ -7,7 +7,7 @@ from datetime import datetime
 from benedict import benedict
 from grohe import GroheClient
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
@@ -91,6 +91,7 @@ class BlueProfCoordinator(DataUpdateCoordinator, CoordinatorInterface, Coordinat
 
         except Exception as e:
             _LOGGER.error("Error updating Grohe Blue Professional data: %s", str(e))
+            raise UpdateFailed(f"Error updating Grohe Blue Professional data: {e}") from e
 
     async def get_initial_value(self) -> Dict[str, any]:
         return await self._get_data()

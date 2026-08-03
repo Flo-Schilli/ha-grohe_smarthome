@@ -7,7 +7,7 @@ from benedict import benedict
 from grohe import GroheClient
 from grohe.enum.grohe_enum import GroheGroupBy
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.grohe_smarthome.dto.config_dtos import DeviceConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
@@ -147,6 +147,7 @@ class GuardCoordinator(DataUpdateCoordinator, CoordinatorInterface, CoordinatorV
 
         except Exception as e:
             _LOGGER.error("Error updating Grohe Sense Guard data: %s", str(e))
+            raise UpdateFailed(f"Error updating Grohe Sense Guard data: {e}") from e
 
     async def get_initial_value(self) -> Dict[str, any]:
         return await self._get_data()

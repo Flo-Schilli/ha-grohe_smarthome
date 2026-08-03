@@ -460,7 +460,7 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
             )
 
     async def handle_login_and_get_tokens(call: ServiceCall) -> ServiceResponse:
-        _LOGGER.debug("Login and get tokens for params: %s", call.data)
+        _LOGGER.debug("Login and get tokens for username: %s", call.data.get("username"))
         username = call.data.get("username")
         password = call.data.get("password")
         if username is None or password is None:

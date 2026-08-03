@@ -5,7 +5,7 @@ from datetime import datetime
 
 from grohe import GroheClient
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.dto.notification_dto import Notification
@@ -53,6 +53,7 @@ class SenseCoordinator(DataUpdateCoordinator, CoordinatorInterface):
 
         except Exception as e:
             _LOGGER.error("Error updating Grohe Sense data: %s", str(e))
+            raise UpdateFailed(f"Error updating Grohe Sense data: {e}") from e
 
     async def get_initial_value(self) -> Dict[str, any]:
         return await self._get_data()
