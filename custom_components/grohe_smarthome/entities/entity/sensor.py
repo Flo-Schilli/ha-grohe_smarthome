@@ -58,8 +58,8 @@ class Sensor(CoordinatorEntity, SensorEntity):
             self._old_datetime_value = self._value
 
         # Needed for Sensor Entity
-        self._attr_name = f"{self._device.name} {self._sensor.name}"
-        self._attr_has_entity_name = False
+        self._attr_name = self._sensor.name
+        self._attr_has_entity_name = True
 
         self._attr_entity_registry_enabled_default = self._sensor.enabled
 

@@ -40,8 +40,8 @@ class Todo(CoordinatorEntity, TodoListEntity):
         self._list: list[TodoItem] = []
 
         # Needed for TodoEntity
-        self._attr_name = f"{self._device.name} {self._todo.name}"
-        self._attr_has_entity_name = False
+        self._attr_name = self._todo.name
+        self._attr_has_entity_name = True
         self._attr_todo_items = []
         self._attr_supported_features = (
             TodoListEntityFeature.UPDATE_TODO_ITEM

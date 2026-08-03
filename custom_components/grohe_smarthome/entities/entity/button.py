@@ -32,8 +32,8 @@ class Button(ButtonEntity):
         # Needed for ValveEntity
         self._attr_icon = "mdi:water"
 
-        self._attr_name = f"{self._device.name} {self._button.name}"
-        self._attr_has_entity_name = False
+        self._attr_name = self._button.name
+        self._attr_has_entity_name = True
 
     @property
     def unique_id(self):

@@ -40,8 +40,8 @@ class Valve(ValveEntity):
         # Needed for ValveEntity
         self._attr_icon = "mdi:water"
 
-        self._attr_name = f"{self._device.name} {self._valve.name}"
-        self._attr_has_entity_name = False
+        self._attr_name = self._valve.name
+        self._attr_has_entity_name = True
 
         # Set the integration unavailable until first update was successful.
         self._attr_available = False
