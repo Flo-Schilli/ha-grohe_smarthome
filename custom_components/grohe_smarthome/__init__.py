@@ -12,9 +12,9 @@ from homeassistant.helpers.device_registry import DeviceEntry
 
 from custom_components.grohe_smarthome.const import (
     CONF_PASSWORD,
-    CONF_PLATFORM,
     CONF_USERNAME,
     DOMAIN,
+    PLATFORMS,
 )
 from custom_components.grohe_smarthome.dto.config_dtos import ConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
@@ -39,7 +39,7 @@ async def async_unload_entry(ha: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
 
     _LOGGER.debug("Unloading Grohe Entry")
-    unload_ok = await ha.config_entries.async_unload_platforms(entry, CONF_PLATFORM)
+    unload_ok = await ha.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
         ha.data[DOMAIN].pop(entry.entry_id)
@@ -130,7 +130,7 @@ async def async_setup_entry(ha: HomeAssistant, entry: ConfigEntry) -> bool:
         "config": config,
     }
 
-    await ha.config_entries.async_forward_entry_setups(entry, CONF_PLATFORM)
+    await ha.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     _LOGGER.debug("Starting first refresh for all coordinators")
     await profile_coordinator.async_config_entry_first_refresh()
