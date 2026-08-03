@@ -58,6 +58,32 @@ class GroheSenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_reauth(self, entry_data):
+        """Handle reauthentication triggered by ConfigEntryAuthFailed."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input=None):
+        """Confirm new credentials for an entry that failed authentication."""
+        errors: dict[str, str] = {}
+        reauth_entry = self._get_reauth_entry()
+
+        if user_input is not None:
+            error = await self._async_validate_login(
+                user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+            )
+            if error is None:
+                return self.async_update_reload_and_abort(reauth_entry, data=user_input)
+
+            errors["base"] = error
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=self.add_suggested_values_to_schema(
+                DATA_SCHEMA, reauth_entry.data
+            ),
+            errors=errors,
+        )
+
     async def async_step_reconfigure(self, user_input=None):
         """Allow updating the username/password of an existing entry."""
         errors: dict[str, str] = {}
