@@ -24,3 +24,7 @@ known-first-party = ["custom_components.grohe_smarthome"]
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

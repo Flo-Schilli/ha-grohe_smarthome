@@ -24,6 +24,20 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
 
+  test:
+    name: Pytest
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v4"
+      - name: Set up Python
+        uses: "actions/setup-python@v5"
+        with:
+          python-version: "3.13"
+      - name: Install test dependencies
+        run: pip install -r requirements_dev.txt
+      - name: Run tests
+        run: pytest tests/ -v
+
   hacs:
     name: HACS Action
     runs-on: "ubuntu-latest"
