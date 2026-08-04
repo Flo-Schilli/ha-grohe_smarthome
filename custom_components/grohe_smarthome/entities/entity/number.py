@@ -1,8 +1,7 @@
 import logging
-from datetime import time as dt_time
 
 from benedict import benedict
-from homeassistant.components.time import TimeEntity
+from homeassistant.components.number import NumberDeviceClass, NumberEntity
 from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import (
@@ -10,46 +9,51 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from custom_components.grohe_smarthome.dto.config_dtos import TimeDto
+from custom_components.grohe_smarthome.dto.config_dtos import NumberDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
+from custom_components.grohe_smarthome.entities.helper import Helper
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _minutes_to_time(minutes: int | None) -> dt_time | None:
-    if minutes is None:
-        return None
-    return dt_time(hour=(int(minutes) // 60) % 24, minute=int(minutes) % 60)
-
-
-def _time_to_minutes(value: dt_time) -> int:
-    return value.hour * 60 + value.minute
-
-
-class Time(CoordinatorEntity, TimeEntity):
+class Number(CoordinatorEntity, NumberEntity):
     def __init__(
         self,
         domain: str,
         coordinator: DataUpdateCoordinator,
         device: GroheDevice,
-        time_config: TimeDto,
+        number: NumberDto,
         initial_value: dict[str, any] = None,
     ):
         super().__init__(coordinator)
         self._device = device
         self._domain = domain
-        self._time = time_config
+        self._number = number
         self._coordinator = coordinator
         self._attr_native_value = self._get_value((initial_value or {}).get("details"))
 
-        self._attr_name = self._time.name
+        self._attr_name = self._number.name
         self._attr_has_entity_name = True
-        self._attr_entity_registry_enabled_default = self._time.enabled
+        self._attr_entity_registry_enabled_default = self._number.enabled
+
+        self._attr_native_min_value = self._number.min_value
+        self._attr_native_max_value = self._number.max_value
+        self._attr_native_step = self._number.step
+
+        if self._number.unit is not None:
+            self._attr_native_unit_of_measurement = Helper.get_ha_units(
+                self._number.unit
+            )
+
+        if self._number.device_class is not None:
+            self._attr_device_class = NumberDeviceClass(
+                self._number.device_class.lower()
+            )
 
     @property
     def unique_id(self):
         return (
-            f"{self._device.appliance_id}_{self._time.name.lower().replace(' ', '_')}"
+            f"{self._device.appliance_id}_{self._number.name.lower().replace(' ', '_')}"
         )
 
     @property
@@ -63,20 +67,20 @@ class Time(CoordinatorEntity, TimeEntity):
             suggested_area=self._device.room_name,
         )
 
-    def _get_value(self, full_data: dict[str, any] | None) -> dt_time | None:
-        if full_data is not None and self._time.keypath is not None:
+    def _get_value(self, full_data: dict[str, any] | None) -> float | None:
+        if full_data is not None and self._number.keypath is not None:
             # We do have some data here, so let's extract it
             data = benedict(full_data)
-            minutes: int | None = None
+            value: float | None = None
             try:
-                minutes = data.get(self._time.keypath)
+                value = data.get(self._number.keypath)
 
             except KeyError:
                 _LOGGER.error(
-                    f"Device: {self._device.name} ({self._device.appliance_id}) with time: {self._time.name} has no value on keypath: {self._time.keypath}"
+                    f"Device: {self._device.name} ({self._device.appliance_id}) with number: {self._number.name} has no value on keypath: {self._number.keypath}"
                 )
 
-            return _minutes_to_time(minutes)
+            return value
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -86,8 +90,8 @@ class Time(CoordinatorEntity, TimeEntity):
             )
             self.async_write_ha_state()
 
-    async def async_set_value(self, value: dt_time) -> None:
-        if self._time.keypath is not None:
+    async def async_set_native_value(self, value: float) -> None:
+        if self._number.keypath is not None:
             data_to_set = benedict()
-            data_to_set[self._time.keypath] = _time_to_minutes(value)
+            data_to_set[self._number.keypath] = value
             await self._coordinator.set_config(data_to_set)

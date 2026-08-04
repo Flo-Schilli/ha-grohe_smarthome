@@ -1,47 +1,44 @@
 import logging
-from datetime import timedelta
 
 from benedict import benedict
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.util import Throttle
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+)
 
 from custom_components.grohe_smarthome.dto.config_dtos import SwitchDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
-from custom_components.grohe_smarthome.entities.interface.coordinator_config_interface import (
-    CoordinatorConfigInterface,
-)
 
 _LOGGER = logging.getLogger(__name__)
 
-SWITCH_UPDATE_DELAY = timedelta(minutes=1)
 
-
-class Switch(SwitchEntity):
+class Switch(CoordinatorEntity, SwitchEntity):
     def __init__(
         self,
         domain: str,
         coordinator: DataUpdateCoordinator,
         device: GroheDevice,
         switch: SwitchDto,
+        initial_value: dict[str, any] = None,
     ):
+        super().__init__(coordinator)
         self._device = device
         self._domain = domain
         self._switch = switch
-        self._is_on: bool | None = None
         self._coordinator = coordinator
+        self._is_on: bool | None = self._get_value((initial_value or {}).get("details"))
 
         self._attr_name = self._switch.name
         self._attr_has_entity_name = True
-
-        # Set the integration unavailable until first update was successful.
-        self._attr_available = False
-
         self._attr_entity_registry_enabled_default = self._switch.enabled
 
         if self._switch.device_class is not None:
-            self._attr_device_class = SwitchDeviceClass(self._switch.device_class.lower())
+            self._attr_device_class = SwitchDeviceClass(
+                self._switch.device_class.lower()
+            )
 
     @property
     def unique_id(self):
@@ -64,8 +61,8 @@ class Switch(SwitchEntity):
     def is_on(self) -> bool | None:
         return self._is_on
 
-    def _get_value(self, full_data: dict[str, any]) -> bool | None:
-        if self._switch.keypath is not None:
+    def _get_value(self, full_data: dict[str, any] | None) -> bool | None:
+        if full_data is not None and self._switch.keypath is not None:
             # We do have some data here, so let's extract it
             data = benedict(full_data)
             value: bool | None = None
@@ -79,33 +76,17 @@ class Switch(SwitchEntity):
 
             return value
 
-    @Throttle(SWITCH_UPDATE_DELAY)
-    async def async_update(self):
-        if isinstance(self._coordinator, CoordinatorConfigInterface):
-            data = await self._coordinator.get_config_value()
-            value = self._get_value(data)
-            self._attr_available = value is not None
-            self._is_on = value
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        if self.coordinator.data is not None:
+            self._is_on = self._get_value(self.coordinator.data.get("details"))
+            self.async_write_ha_state()
 
-            _LOGGER.debug(
-                f"Updating switch value for {self._device.name}: {value} (isAvailable: {self._attr_available})"
-            )
-
-    async def _set_state(self, state: bool):
-        if (
-            isinstance(self._coordinator, CoordinatorConfigInterface)
-            and self._switch.keypath is not None
-        ):
+    async def _set_state(self, state: bool) -> None:
+        if self._switch.keypath is not None:
             data_to_set = benedict()
             data_to_set[self._switch.keypath] = state
-            response_data = await self._coordinator.set_config(data_to_set)
-
-            value = self._get_value(response_data)
-            _LOGGER.debug(
-                f'Device: {self._device.name} ({self._device.appliance_id}) with switch name: "{self._switch.name}" has the following value on keypath "{self._switch.keypath}": {value}'
-            )
-
-            self._is_on = value
+            await self._coordinator.set_config(data_to_set)
 
     async def async_turn_on(self, **kwargs) -> None:
         _LOGGER.info("Turning on %s for %s", self._switch.name, self._device.name)

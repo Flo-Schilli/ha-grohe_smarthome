@@ -1,8 +1,10 @@
+import asyncio
 import logging
 from datetime import datetime, timedelta
 
-from grohe import GroheClient
+from grohe import GroheClient, GroheForbiddenError, GroheUnauthorizedError
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
@@ -35,6 +37,7 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
         self._last_update = datetime.now().astimezone().replace(tzinfo=self._timezone)
         self._data: dict[str, any] = {}
         self._log_response_data = log_response_data
+        self._initial_value_lock = asyncio.Lock()
 
     async def _get_data(self) -> dict[str, any]:
         api_data = await self._api.get_profile_notifications(50)
@@ -59,6 +62,19 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
             )
             return data
 
+        except GroheUnauthorizedError as e:
+            raise ConfigEntryAuthFailed(str(e)) from e
+
+        except GroheForbiddenError as e:
+            _LOGGER.warning(
+                "Grohe denied the request for domain %s, keeping last known data: %s",
+                self._domain,
+                e,
+            )
+            if self.data is not None:
+                return self.data
+            raise UpdateFailed(str(e)) from e
+
         except Exception as e:
             _LOGGER.error("Error updating Profile data: %s", str(e))
             raise UpdateFailed(f"Error updating Profile data: {e}") from e
@@ -70,7 +86,10 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
         await self._api.update_profile_notification_state(notification_id, state)
 
     async def get_initial_value(self) -> dict[str, any]:
-        return await self._get_data()
+        async with self._initial_value_lock:
+            if self.data is None:
+                self.data = await self._get_data()
+            return self.data
 
     def set_polling_interval(self, polling: int) -> None:
         self.update_interval = timedelta(seconds=polling)

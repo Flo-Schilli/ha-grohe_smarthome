@@ -1,5 +1,4 @@
 import logging
-from datetime import timedelta
 
 from benedict import benedict
 from homeassistant.components.valve import (
@@ -8,43 +7,40 @@ from homeassistant.components.valve import (
     ValveEntityFeature,
 )
 from homeassistant.const import STATE_UNKNOWN
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.util import Throttle
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+)
 
 from custom_components.grohe_smarthome.dto.config_dtos import ValveDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
-from custom_components.grohe_smarthome.entities.interface.coordinator_valve_interface import (
-    CoordinatorValveInterface,
-)
 
 _LOGGER = logging.getLogger(__name__)
 
-VALVE_UPDATE_DELAY = timedelta(minutes=1)
 
-
-class Valve(ValveEntity):
+class Valve(CoordinatorEntity, ValveEntity):
     def __init__(
         self,
         domain: str,
         coordinator: DataUpdateCoordinator,
         device: GroheDevice,
         valve: ValveDto,
+        initial_value: dict[str, any] = None,
     ):
+        super().__init__(coordinator)
         self._device = device
         self._domain = domain
         self._valve = valve
-        self._is_closed = STATE_UNKNOWN
         self._coordinator = coordinator
+        self._is_closed = self._get_is_closed((initial_value or {}).get("details"))
 
         # Needed for ValveEntity
         self._attr_icon = "mdi:water"
 
         self._attr_name = self._valve.name
         self._attr_has_entity_name = True
-
-        # Set the integration unavailable until first update was successful.
-        self._attr_available = False
 
         self._attr_supported_features = (
             ValveEntityFeature.OPEN | ValveEntityFeature.CLOSE
@@ -75,11 +71,11 @@ class Valve(ValveEntity):
         return False
 
     @property
-    def is_closed(self) -> bool:
+    def is_closed(self):
         return self._is_closed
 
-    def _get_value(self, full_data: dict[str, any]) -> bool | None:
-        if self._valve.keypath is not None:
+    def _get_value(self, full_data: dict[str, any] | None) -> bool | None:
+        if full_data is not None and self._valve.keypath is not None:
             # We do have some data here, so let's extract it
             data = benedict(full_data)
             value: bool | None = None
@@ -93,39 +89,21 @@ class Valve(ValveEntity):
 
             return value
 
-    @Throttle(VALVE_UPDATE_DELAY)
-    async def async_update(self):
-        if isinstance(self._coordinator, CoordinatorValveInterface):
-            data = await self._coordinator.get_valve_value()
-            valve_value = self._get_value(data)
-            if valve_value is not None:
-                self._attr_available = True
-                self._is_closed = not valve_value
-            else:
-                self._attr_available = False
+    def _get_is_closed(self, full_data: dict[str, any] | None) -> bool | str | None:
+        value = self._get_value(full_data)
+        return not value if value is not None else STATE_UNKNOWN
 
-            _LOGGER.debug(
-                f"Updating valve value for {self._device.name}: {valve_value} (isAvailable: {self._attr_available}, isClosed: {self._is_closed})"
-            )
-            _LOGGER.debug(
-                f"Full command value for {self._device.name} and getting the valve value: {data})"
-            )
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        if self.coordinator.data is not None:
+            self._is_closed = self._get_is_closed(self.coordinator.data.get("details"))
+            self.async_write_ha_state()
 
     async def _set_state(self, state):
-        if (
-            isinstance(self._coordinator, CoordinatorValveInterface)
-            and self._valve.keypath is not None
-        ):
+        if self._valve.keypath is not None:
             data_to_set = benedict()
             data_to_set[self._valve.keypath] = state
-            response_data = await self._coordinator.set_valve(data_to_set)
-
-            value = not self._get_value(response_data)
-            _LOGGER.debug(
-                f'Device: {self._device.name} ({self._device.appliance_id}) with valve name: "{self._valve.name}" has the following value on keypath "{self._valve.keypath}": {value}'
-            )
-
-            self._is_closed = value
+            await self._coordinator.set_valve(data_to_set)
 
     async def async_open_valve(self) -> None:
         _LOGGER.info("Turning on water for %s", self._device.name)

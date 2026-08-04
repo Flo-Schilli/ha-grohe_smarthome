@@ -177,6 +177,13 @@ devices:
           keypath: 'config.sprinkler_mode_start_time'
         - name: 'Sprinkler mode: Stop time'
           keypath: 'config.sprinkler_mode_stop_time'
+      numbers:
+        - name: 'Withdrawal amount limit'
+          keypath: 'config.withdrawel_amount_limit'
+          min_value: 0
+          max_value: 1000
+          step: 1
+          unit: 'Liters'
 
     - type: GroheBlueHome
       todos:

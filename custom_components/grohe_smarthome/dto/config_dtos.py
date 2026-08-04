@@ -114,6 +114,21 @@ class TimeDto:
 
 @dataclass_json
 @dataclass
+class NumberDto:
+    name: str
+    keypath: str
+    min_value: float = 0
+    max_value: float = 100
+    step: float = 1
+    unit: str | None = None
+    device_class: str | None = None
+    category: str | None = None
+    enabled: bool | None = True
+    min_version: str | None = None
+
+
+@dataclass_json
+@dataclass
 class ButtonCommands:
     keypath: str
     value: bool | str | int
@@ -146,6 +161,7 @@ class DeviceDto:
     binary_sensors: list[BinarySensorDto] | None = None
     switches: list[SwitchDto] | None = None
     times: list[TimeDto] | None = None
+    numbers: list[NumberDto] | None = None
 
 
 @dataclass_json
