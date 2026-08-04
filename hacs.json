@@ -2,5 +2,5 @@
   "name": "Grohe Smarthome",
   "render_readme": true,
   "country": ["DE"],
-  "homeassistant": "2026.7.4"
+  "homeassistant": "2026.1.0"
 }
