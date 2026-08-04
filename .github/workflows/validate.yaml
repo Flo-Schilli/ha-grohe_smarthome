@@ -16,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: "actions/setup-python@v5"
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - name: Install ruff
         run: pip install -r requirements_dev.txt
       - name: Ruff check
@@ -32,7 +32,7 @@ jobs:
       - name: Set up Python
         uses: "actions/setup-python@v5"
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - name: Install test dependencies
         run: pip install -r requirements_dev.txt
       - name: Run tests
