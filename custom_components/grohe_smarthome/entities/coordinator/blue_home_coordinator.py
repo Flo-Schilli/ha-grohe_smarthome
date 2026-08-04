@@ -1,11 +1,23 @@
 """Coordinator for Grohe Blue Home devices."""
 
 import asyncio
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 from typing import Any, cast
 
+import httpx
 from benedict import benedict
+from grohe import (
+    GroheClient,
+    GroheForbiddenError,
+    GroheNetworkError,
+    GroheUnauthorizedError,
+)
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
+
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.dto.notification_dto import Notification
 from custom_components.grohe_smarthome.entities.interface.coordinator_button_interface import (
@@ -14,12 +26,6 @@ from custom_components.grohe_smarthome.entities.interface.coordinator_button_int
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
     CoordinatorInterface,
 )
-from grohe import GroheClient
-import httpx
-
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -81,7 +87,18 @@ class BlueHomeCoordinator(
             current_data = self.data
             log_msg = "using cached data"
         else:
-            current_data = await self._fetch_device_data()
+            try:
+                current_data = await self._fetch_device_data()
+            except GroheUnauthorizedError as err:
+                raise ConfigEntryAuthFailed(str(err)) from err
+            except GroheForbiddenError as err:
+                _LOGGER.warning(
+                    "Grohe denied the request for %s (%s): %s",
+                    self._device.name,
+                    self._device.appliance_id,
+                    err,
+                )
+                raise UpdateFailed(str(err)) from err
             log_msg = "fetched initial data"
 
         if self._log_response_data:
@@ -194,7 +211,7 @@ class BlueHomeCoordinator(
                     {"command": {"get_current_measurement": True}},
                 )
 
-            except httpx.ReadTimeout as err:
+            except (httpx.ReadTimeout, GroheNetworkError) as err:
                 if attempt + 1 >= max_attempts:
                     _LOGGER.error(
                         "Refresh command failed after %d attempts for %s (%s): %s",

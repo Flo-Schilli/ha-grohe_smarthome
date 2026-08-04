@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 from dataclasses_json import dataclass_json
 
@@ -15,5 +14,5 @@ class Notification:
     type: int
     threshold_quantity: str
     threshold_type: str
-    notification_text: Optional[str] = None
-    notification_type: Optional[str] = None
+    notification_text: str | None = None
+    notification_type: str | None = None

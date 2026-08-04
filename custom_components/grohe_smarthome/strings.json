@@ -8,13 +8,29 @@
           "username": "E-Mail",
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Update Grohe login",
+        "data": {
+          "username": "E-Mail",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with Grohe",
+        "description": "Your Grohe login is no longer valid. Please enter your current credentials.",
+        "data": {
+          "username": "E-Mail",
+          "password": "Password"
+        }
       }
     },
     "error": {
-      "invalid_api_key": "This message will be displayed if `invalid_api_key` is returned as a flow error."
+      "invalid_auth": "Login failed. Please check your username and password."
     },
     "abort": {
-      "stale_api_key": "This message will be displayed if `stale_api_key` is returned as the abort reason."
+      "reconfigure_successful": "Login credentials updated successfully.",
+      "reauth_successful": "Re-authentication was successful."
     },
     "progress": {
       "slow_task": "This message will be displayed if `slow_task` is returned as `progress_action` for `async_show_progress`."

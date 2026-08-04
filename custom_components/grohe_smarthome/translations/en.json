@@ -8,7 +8,29 @@
           "username": "E-Mail",
           "password": "Password"
         }
+      },
+      "reconfigure": {
+        "title": "Update Grohe login",
+        "data": {
+          "username": "E-Mail",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with Grohe",
+        "description": "Your Grohe login is no longer valid. Please enter your current credentials.",
+        "data": {
+          "username": "E-Mail",
+          "password": "Password"
+        }
       }
+    },
+    "error": {
+      "invalid_auth": "Login failed. Please check your username and password."
+    },
+    "abort": {
+      "reconfigure_successful": "Login credentials updated successfully.",
+      "reauth_successful": "Re-authentication was successful."
     }
   },
   "options": {

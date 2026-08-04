@@ -1,6 +1,6 @@
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult, section
-import voluptuous as vol
 from homeassistant.helpers import config_validation
 
 
