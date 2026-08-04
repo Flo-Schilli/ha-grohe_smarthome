@@ -93,6 +93,27 @@ class ValveDto:
 
 @dataclass_json
 @dataclass
+class SwitchDto:
+    name: str
+    keypath: str
+    device_class: str | None = None
+    category: str | None = None
+    enabled: bool | None = True
+    min_version: str | None = None
+
+
+@dataclass_json
+@dataclass
+class TimeDto:
+    name: str
+    keypath: str
+    category: str | None = None
+    enabled: bool | None = True
+    min_version: str | None = None
+
+
+@dataclass_json
+@dataclass
 class ButtonCommands:
     keypath: str
     value: bool | str | int
@@ -123,6 +144,8 @@ class DeviceDto:
     valves: list[ValveDto] | None = None
     buttons: list[ButtonDto] | None = None
     binary_sensors: list[BinarySensorDto] | None = None
+    switches: list[SwitchDto] | None = None
+    times: list[TimeDto] | None = None
 
 
 @dataclass_json

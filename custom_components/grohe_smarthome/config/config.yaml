@@ -157,6 +157,26 @@ devices:
           category: 'Diagnostic'
           device_class: 'Connectivity'
           enabled: true
+      switches:
+        - name: 'Sprinkler mode: Active on Monday'
+          keypath: 'config.sprinkler_mode_active_monday'
+        - name: 'Sprinkler mode: Active on Tuesday'
+          keypath: 'config.sprinkler_mode_active_tuesday'
+        - name: 'Sprinkler mode: Active on Wednesday'
+          keypath: 'config.sprinkler_mode_active_wednesday'
+        - name: 'Sprinkler mode: Active on Thursday'
+          keypath: 'config.sprinkler_mode_active_thursday'
+        - name: 'Sprinkler mode: Active on Friday'
+          keypath: 'config.sprinkler_mode_active_friday'
+        - name: 'Sprinkler mode: Active on Saturday'
+          keypath: 'config.sprinkler_mode_active_saturday'
+        - name: 'Sprinkler mode: Active on Sunday'
+          keypath: 'config.sprinkler_mode_active_sunday'
+      times:
+        - name: 'Sprinkler mode: Start time'
+          keypath: 'config.sprinkler_mode_start_time'
+        - name: 'Sprinkler mode: Stop time'
+          keypath: 'config.sprinkler_mode_stop_time'
 
     - type: GroheBlueHome
       todos:

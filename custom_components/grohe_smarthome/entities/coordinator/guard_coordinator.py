@@ -13,6 +13,9 @@ from custom_components.grohe_smarthome.dto.notification_dto import Notification
 from custom_components.grohe_smarthome.entities.interface.coordinator_button_interface import (
     CoordinatorButtonInterface,
 )
+from custom_components.grohe_smarthome.entities.interface.coordinator_config_interface import (
+    CoordinatorConfigInterface,
+)
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
     CoordinatorInterface,
 )
@@ -28,6 +31,7 @@ class GuardCoordinator(
     CoordinatorInterface,
     CoordinatorValveInterface,
     CoordinatorButtonInterface,
+    CoordinatorConfigInterface,
 ):
     def __init__(
         self,
@@ -178,6 +182,24 @@ class GuardCoordinator(
         )
 
         return api_data
+
+    async def get_config_value(self) -> dict[str, any]:
+        api_data = await self._api.get_appliance_info(
+            self._device.location_id, self._device.room_id, self._device.appliance_id
+        )
+
+        return api_data
+
+    async def set_config(self, data_to_set: dict[str, any]) -> dict[str, any]:
+        config = data_to_set.get("config", {})
+        await self._api.set_appliance_config(
+            self._device.location_id,
+            self._device.room_id,
+            self._device.appliance_id,
+            config,
+        )
+
+        return await self.get_config_value()
 
     async def send_command(self, data_to_send: dict[str, any]) -> dict[str, any]:
         api_data = await self._api.set_appliance_command(

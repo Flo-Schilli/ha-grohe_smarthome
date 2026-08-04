@@ -4,15 +4,20 @@ from grohe import GroheTypes
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from custom_components.grohe_smarthome.dto.config_dtos import (
+    BinarySensorDto,
     ButtonDto,
     ConfigDto,
     NotificationsDto,
     SensorDto,
+    SwitchDto,
+    TimeDto,
 )
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.entities.entity.binary_sensor import BinarySensor
 from custom_components.grohe_smarthome.entities.entity.button import Button
 from custom_components.grohe_smarthome.entities.entity.sensor import Sensor
+from custom_components.grohe_smarthome.entities.entity.switch import Switch
+from custom_components.grohe_smarthome.entities.entity.time import Time
 from custom_components.grohe_smarthome.entities.entity.todo import Todo
 from custom_components.grohe_smarthome.entities.entity.valve import Valve
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
@@ -28,7 +33,9 @@ class EntityHelper:
         self._domain = domain
 
     @staticmethod
-    def is_valid_version(device: GroheDevice, entity: SensorDto | ButtonDto):
+    def is_valid_version(
+        device: GroheDevice, entity: SensorDto | ButtonDto | BinarySensorDto | SwitchDto | TimeDto
+    ):
         if entity.min_version is not None:
             entity_version = tuple(map(int, entity.min_version.split(".")[:2]))
             return device.stripped_sw_version >= entity_version
@@ -177,6 +184,54 @@ class EntityHelper:
                                 binary_sensor,
                                 initial_value,
                             )
+                        )
+
+        return entities
+
+    async def add_switch_entities(
+        self, coordinator: CoordinatorInterface, device: GroheDevice
+    ) -> list[Switch]:
+
+        config_name = EntityHelper.get_config_name_by_device_type(device)
+
+        entities: list[Switch] = []
+        if (
+            config_name
+            and self._config.get_device_config(config_name) is not None
+            and self._config.get_device_config(config_name).switches is not None
+        ):
+            for switch in self._config.get_device_config(config_name).switches:
+                if EntityHelper.is_valid_version(device, switch):
+                    _LOGGER.debug(
+                        f"Adding switch {switch.name} for device {device.name}"
+                    )
+                    if isinstance(coordinator, DataUpdateCoordinator):
+                        entities.append(
+                            Switch(self._domain, coordinator, device, switch)
+                        )
+
+        return entities
+
+    async def add_time_entities(
+        self, coordinator: CoordinatorInterface, device: GroheDevice
+    ) -> list[Time]:
+
+        config_name = EntityHelper.get_config_name_by_device_type(device)
+
+        entities: list[Time] = []
+        if (
+            config_name
+            and self._config.get_device_config(config_name) is not None
+            and self._config.get_device_config(config_name).times is not None
+        ):
+            for time_config in self._config.get_device_config(config_name).times:
+                if EntityHelper.is_valid_version(device, time_config):
+                    _LOGGER.debug(
+                        f"Adding time {time_config.name} for device {device.name}"
+                    )
+                    if isinstance(coordinator, DataUpdateCoordinator):
+                        entities.append(
+                            Time(self._domain, coordinator, device, time_config)
                         )
 
         return entities
