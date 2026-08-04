@@ -4,7 +4,7 @@ import logging
 import os.path
 
 import httpx
-from grohe import GroheClient, GroheTypes
+from grohe import GroheClient, GroheNetworkError, GroheTypes, GroheUnauthorizedError
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import httpx_client
@@ -86,17 +86,21 @@ async def async_setup_entry(ha: HomeAssistant, entry: GroheConfigEntry) -> bool:
 
     try:
         await api.login()
-    except httpx.HTTPError as err:
+    except GroheUnauthorizedError as err:
+        raise ConfigEntryAuthFailed(str(err)) from err
+    except (httpx.HTTPError, GroheNetworkError) as err:
         raise ConfigEntryNotReady(f"Could not connect to Grohe: {err}") from err
     except Exception as err:
-        if "invalid username/password" in str(err).lower():
-            raise ConfigEntryAuthFailed("Invalid Grohe username or password") from err
         raise ConfigEntryNotReady(f"Could not log in to Grohe: {err}") from err
 
     # Get all devices available
     try:
         devices: list[GroheDevice] = await GroheDevice.get_devices(api)
-    except httpx.HTTPError as err:
+    except GroheUnauthorizedError as err:
+        raise ConfigEntryAuthFailed(str(err)) from err
+    except (httpx.HTTPError, GroheNetworkError) as err:
+        raise ConfigEntryNotReady(f"Could not fetch Grohe devices: {err}") from err
+    except Exception as err:
         raise ConfigEntryNotReady(f"Could not fetch Grohe devices: {err}") from err
 
     polling = entry.options.get("polling", 900)

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+from grohe import GroheNetworkError, GroheUnauthorizedError
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -30,8 +31,8 @@ async def test_setup_entry_raises_auth_failed_on_invalid_credentials(hass):
     entry.add_to_hass(hass)
 
     client = AsyncMock()
-    client.login.side_effect = Exception(
-        "Invalid username/password or unexpected response from Grohe service"
+    client.login.side_effect = GroheUnauthorizedError(
+        "Invalid Grohe username or password"
     )
 
     with (
@@ -47,6 +48,27 @@ async def test_setup_entry_raises_not_ready_on_network_error(hass):
 
     client = AsyncMock()
     client.login.side_effect = httpx.ConnectError("boom")
+
+    with (
+        patch(GROHE_CLIENT_PATH, return_value=client),
+        pytest.raises(ConfigEntryNotReady),
+    ):
+        await async_setup_entry(hass, entry)
+
+
+async def test_setup_entry_raises_not_ready_on_grohe_network_error_fetching_devices(
+    hass,
+):
+    """Regression test: a GroheNetworkError (e.g. a timed-out dashboard call) while
+    fetching devices must surface as ConfigEntryNotReady, not an unhandled crash."""
+    entry = _make_entry()
+    entry.add_to_hass(hass)
+
+    client = AsyncMock()
+    client.login = AsyncMock(return_value=None)
+    client.get_dashboard.side_effect = GroheNetworkError(
+        "GET https://.../dashboard failed: timeout"
+    )
 
     with (
         patch(GROHE_CLIENT_PATH, return_value=client),
