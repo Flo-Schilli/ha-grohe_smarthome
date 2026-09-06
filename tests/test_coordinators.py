@@ -172,3 +172,141 @@ async def test_sense_coordinator_initial_value_survives_unexpected_error(hass):
 
     with pytest.raises(ConfigEntryNotReady):
         await coordinator.get_initial_value()
+
+
+# _async_update_data() drives every *regular* refresh cycle after setup (unlike
+# get_initial_value(), which only runs once during platform setup). It already had
+# GroheForbiddenError handling before this fix, but that behavior wasn't under test -
+# these lock in the two cases explicitly: a 429 with no cached data yet must still
+# raise UpdateFailed (so HA marks entities unavailable rather than crashing), and a
+# 429 with cached data must keep serving the last known data instead of failing.
+
+
+async def test_sense_coordinator_update_data_raises_update_failed_on_429_without_cache(
+    hass,
+):
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = SenseCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_sense_coordinator_update_data_keeps_last_known_data_on_429(hass):
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = SenseCoordinator(hass, DOMAIN, _make_device(), api)
+    coordinator.data = {"details": "cached-details", "status": "cached-status"}
+
+    result = await coordinator._async_update_data()
+
+    assert result == {"details": "cached-details", "status": "cached-status"}
+
+
+async def test_guard_coordinator_update_data_raises_update_failed_on_429_without_cache(
+    hass,
+):
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_guard_coordinator_update_data_keeps_last_known_data_on_429(hass):
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+    coordinator.data = {"details": "cached-details"}
+
+    result = await coordinator._async_update_data()
+
+    assert result == {"details": "cached-details"}
+
+
+async def test_blue_prof_coordinator_update_data_raises_update_failed_on_429_without_cache(
+    hass,
+):
+    api = MagicMock()
+    api.set_appliance_command = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = BlueProfCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_blue_prof_coordinator_update_data_keeps_last_known_data_on_429(hass):
+    api = MagicMock()
+    api.set_appliance_command = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = BlueProfCoordinator(hass, DOMAIN, _make_device(), api)
+    coordinator.data = {"details": "cached-details"}
+
+    result = await coordinator._async_update_data()
+
+    assert result == {"details": "cached-details"}
+
+
+async def test_profile_coordinator_update_data_raises_update_failed_on_429_without_cache(
+    hass,
+):
+    api = MagicMock()
+    api.get_profile_notifications = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = ProfileCoordinator(hass, DOMAIN, api)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+
+async def test_profile_coordinator_update_data_keeps_last_known_data_on_429(hass):
+    api = MagicMock()
+    api.get_profile_notifications = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = ProfileCoordinator(hass, DOMAIN, api)
+    coordinator.data = {"notifications": "cached-notifications"}
+
+    result = await coordinator._async_update_data()
+
+    assert result == {"notifications": "cached-notifications"}
+
+
+async def test_blue_home_coordinator_update_data_raises_update_failed_on_429_without_cache(
+    hass,
+):
+    """BlueHomeCoordinator only hits the API in _async_update_data when there's no
+    cached data yet (once data exists, it's served from cache and refreshed by a
+    separate background task instead) - so there's no "keep last known data" branch
+    to test here, only the no-cache-yet case."""
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = BlueHomeCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
