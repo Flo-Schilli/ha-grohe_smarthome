@@ -6,7 +6,7 @@ from benedict import benedict
 from grohe import GroheClient, GroheForbiddenError, GroheUnauthorizedError
 from grohe.enum.grohe_enum import GroheGroupBy
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.grohe_smarthome.dto.config_dtos import DeviceConfigDto
@@ -121,7 +121,9 @@ class GuardCoordinator(
             raise
 
         except Exception as e:
-            _LOGGER.error(f"Failed to get total values: {e}")
+            # str(e) is empty for some exceptions (e.g. asyncio.TimeoutError), which
+            # otherwise leaves this log line looking blank and useless for diagnosis.
+            _LOGGER.error(f"Failed to get total values: {type(e).__name__}: {e}")
             return 0.0
 
     async def _get_data(self) -> dict[str, any]:
@@ -313,7 +315,25 @@ class GuardCoordinator(
         # it and reuse the result.
         async with self._initial_value_lock:
             if self.data is None:
-                self.data = await self._get_data()
+                try:
+                    self.data = await self._get_data()
+                except GroheUnauthorizedError as e:
+                    raise ConfigEntryAuthFailed(str(e)) from e
+                except GroheForbiddenError as e:
+                    _LOGGER.warning(
+                        "Grohe denied the initial request for %s (%s), will retry: %s",
+                        self._device.name,
+                        self._device.appliance_id,
+                        e,
+                    )
+                    raise ConfigEntryNotReady(str(e)) from e
+                except Exception as e:
+                    _LOGGER.error(
+                        "Error fetching initial Grohe Sense Guard data: %s", str(e)
+                    )
+                    raise ConfigEntryNotReady(
+                        f"Error fetching initial Grohe Sense Guard data: {e}"
+                    ) from e
             return self.data
 
     def set_polling_interval(self, polling: int) -> None:

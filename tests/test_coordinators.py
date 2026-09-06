@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from grohe import GroheForbiddenError
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.grohe_smarthome.entities.coordinator.blue_home_coordinator import (
@@ -87,3 +89,86 @@ async def test_blue_home_coordinator_propagates_error_on_first_fetch(hass):
 
     with pytest.raises(RuntimeError):
         await coordinator._async_update_data()
+
+
+# get_initial_value() is called directly from each platform's async_setup_entry
+# (via EntityHelper), *before* the coordinator's own async_config_entry_first_refresh()
+# runs - so it bypasses all of the retry/backoff machinery DataUpdateCoordinator
+# normally provides. A 429 (GroheRateLimitError, a GroheForbiddenError subclass) or any
+# other transient failure here used to propagate raw out of async_setup_entry, crashing
+# the whole platform instead of politely asking Home Assistant to retry later.
+
+
+async def test_sense_coordinator_initial_value_raises_config_entry_not_ready(hass):
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = SenseCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(ConfigEntryNotReady):
+        await coordinator.get_initial_value()
+
+
+async def test_guard_coordinator_initial_value_raises_config_entry_not_ready(hass):
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(ConfigEntryNotReady):
+        await coordinator.get_initial_value()
+
+
+async def test_blue_prof_coordinator_initial_value_raises_config_entry_not_ready(hass):
+    api = MagicMock()
+    api.set_appliance_command = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = BlueProfCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(ConfigEntryNotReady):
+        await coordinator.get_initial_value()
+
+
+async def test_profile_coordinator_initial_value_raises_config_entry_not_ready(hass):
+    api = MagicMock()
+    api.get_profile_notifications = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = ProfileCoordinator(hass, DOMAIN, api)
+
+    with pytest.raises(ConfigEntryNotReady):
+        await coordinator.get_initial_value()
+
+
+async def test_blue_home_coordinator_initial_value_raises_config_entry_not_ready(hass):
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=GroheForbiddenError("429 Too Many Requests")
+    )
+
+    coordinator = BlueHomeCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(ConfigEntryNotReady):
+        await coordinator.get_initial_value()
+
+
+async def test_sense_coordinator_initial_value_survives_unexpected_error(hass):
+    """A non-Grohe error (e.g. the 'NoneType' has no attribute 'get' crash actually
+    observed in production after a 429) must also turn into ConfigEntryNotReady, not
+    propagate raw and crash platform setup."""
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        side_effect=AttributeError("'NoneType' object has no attribute 'get'")
+    )
+
+    coordinator = SenseCoordinator(hass, DOMAIN, _make_device(), api)
+
+    with pytest.raises(ConfigEntryNotReady):
+        await coordinator.get_initial_value()

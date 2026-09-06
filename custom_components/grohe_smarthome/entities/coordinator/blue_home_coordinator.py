@@ -14,7 +14,7 @@ from grohe import (
     GroheUnauthorizedError,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -70,6 +70,7 @@ class BlueHomeCoordinator(
         # Integration polling has in options min 40s
         self._update_timeout = 30
         self._poll_interval = 10
+        self._initial_value_lock = asyncio.Lock()
 
     async def _get_data(self) -> dict[str, Any]:
         """Get data from the device."""
@@ -253,8 +254,35 @@ class BlueHomeCoordinator(
         return dt_util.parse_datetime(ts_raw)
 
     async def get_initial_value(self) -> dict[str, Any]:
-        """Get the initial value of the device."""
-        return await self._fetch_device_data()
+        """Get the initial value of the device.
+
+        Mirrors the lock+cache pattern of the other coordinators: HA sets up all
+        platforms concurrently, and each one calls this during its own setup, so the
+        lock makes sure only one real fetch happens instead of several concurrent
+        calls to the (rate-limited) Grohe API for the same device.
+        """
+        async with self._initial_value_lock:
+            if self.data is None:
+                try:
+                    self.data = await self._fetch_device_data()
+                except GroheUnauthorizedError as err:
+                    raise ConfigEntryAuthFailed(str(err)) from err
+                except GroheForbiddenError as err:
+                    _LOGGER.warning(
+                        "Grohe denied the initial request for %s (%s), will retry: %s",
+                        self._device.name,
+                        self._device.appliance_id,
+                        err,
+                    )
+                    raise ConfigEntryNotReady(str(err)) from err
+                except Exception as err:
+                    _LOGGER.error(
+                        "Error fetching initial Grohe Blue Home data: %s", err
+                    )
+                    raise ConfigEntryNotReady(
+                        f"Error fetching initial Grohe Blue Home data: {err}"
+                    ) from err
+            return self.data
 
     def set_polling_interval(self, polling: int) -> None:
         """Set the polling interval."""

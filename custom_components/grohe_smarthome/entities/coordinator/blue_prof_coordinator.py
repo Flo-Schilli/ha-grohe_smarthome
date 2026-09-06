@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from benedict import benedict
 from grohe import GroheClient, GroheForbiddenError, GroheUnauthorizedError
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
@@ -148,7 +148,26 @@ class BlueProfCoordinator(
     async def get_initial_value(self) -> dict[str, any]:
         async with self._initial_value_lock:
             if self.data is None:
-                self.data = await self._get_data()
+                try:
+                    self.data = await self._get_data()
+                except GroheUnauthorizedError as e:
+                    raise ConfigEntryAuthFailed(str(e)) from e
+                except GroheForbiddenError as e:
+                    _LOGGER.warning(
+                        "Grohe denied the initial request for %s (%s), will retry: %s",
+                        self._device.name,
+                        self._device.appliance_id,
+                        e,
+                    )
+                    raise ConfigEntryNotReady(str(e)) from e
+                except Exception as e:
+                    _LOGGER.error(
+                        "Error fetching initial Grohe Blue Professional data: %s",
+                        str(e),
+                    )
+                    raise ConfigEntryNotReady(
+                        f"Error fetching initial Grohe Blue Professional data: {e}"
+                    ) from e
             return self.data
 
     def set_polling_interval(self, polling: int) -> None:
