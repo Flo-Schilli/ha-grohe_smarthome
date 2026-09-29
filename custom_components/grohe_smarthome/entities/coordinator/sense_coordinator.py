@@ -110,9 +110,7 @@ class SenseCoordinator(DataUpdateCoordinator, CoordinatorInterface):
                     )
                     raise ConfigEntryNotReady(str(e)) from e
                 except Exception as e:
-                    _LOGGER.error(
-                        "Error fetching initial Grohe Sense data: %s", str(e)
-                    )
+                    _LOGGER.error("Error fetching initial Grohe Sense data: %s", str(e))
                     raise ConfigEntryNotReady(
                         f"Error fetching initial Grohe Sense data: {e}"
                     ) from e

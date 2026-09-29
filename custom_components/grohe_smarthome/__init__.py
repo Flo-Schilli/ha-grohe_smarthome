@@ -150,8 +150,26 @@ async def async_setup_entry(ha: HomeAssistant, entry: GroheConfigEntry) -> bool:
         config=config,
     )
 
-    await ha.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
+    # Refresh before forwarding the platforms, not after.
+    #
+    # async_config_entry_first_refresh() raises ConfigEntryNotReady when the
+    # first fetch fails -- which happens whenever the initial request lands in
+    # one of the windows where Grohe answers with an explicit deny, or on any
+    # transient network error. If the platforms have already been forwarded at
+    # that point, that exception is raised *from inside a forwarded platform*,
+    # which Home Assistant flags as wrong ("raises exception ConfigEntryNotReady
+    # in forwarded platform ...") and which leaves the platforms registered.
+    # Home Assistant then retries async_setup_entry, the forward runs a second
+    # time, and every platform fails with
+    #   ValueError: Config entry ... has already been setup!
+    # From there the entry stays nominally "loaded" while no coordinator ever
+    # runs again -- observed in production as 42 hours of entities stuck on
+    # unavailable with nothing at all in the log, cleared only by a manual
+    # reload.
+    #
+    # Refreshing first means a failed first fetch propagates out of
+    # async_setup_entry itself, which is the contract Home Assistant expects:
+    # it retries cleanly because nothing was registered yet.
     _LOGGER.debug("Starting first refresh for all coordinators")
     await profile_coordinator.async_config_entry_first_refresh()
 
@@ -160,6 +178,8 @@ async def async_setup_entry(ha: HomeAssistant, entry: GroheConfigEntry) -> bool:
             await coordinator.async_config_entry_first_refresh()
 
     _LOGGER.debug("All coordinators initialized with fresh data")
+
+    await ha.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Reload options on change
     async def update_listener(
