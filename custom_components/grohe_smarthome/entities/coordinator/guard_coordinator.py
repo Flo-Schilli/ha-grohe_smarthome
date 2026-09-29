@@ -124,7 +124,18 @@ class GuardCoordinator(
             # str(e) is empty for some exceptions (e.g. asyncio.TimeoutError), which
             # otherwise leaves this log line looking blank and useless for diagnosis.
             _LOGGER.error(f"Failed to get total values: {type(e).__name__}: {e}")
-            return 0.0
+            # Propagate instead of reporting 0.0, for the same reason the auth errors
+            # above do. A fabricated zero is not a harmless placeholder here: the daily
+            # branch in _get_data() recomputes self._total_value from this call, so one
+            # failed fetch collapsed the cumulative total to zero and left it there until
+            # the next successful daily recompute. The production signature is a daily
+            # counter dropping to zero and back within one polling interval, which no real
+            # counter can do -- 400.8 -> 0.0 -> 400.8 -> 0.0 -> 400.8 inside an hour, and
+            # the same again on another day around 113.6. That also corrupts long-term
+            # statistics. Letting it through costs one update cycle marked unavailable,
+            # which is the honest answer, and leaves _total_value untouched so the next
+            # cycle retries.
+            raise
 
     async def _get_data(self) -> dict[str, any]:
         api_data = await self._api.get_appliance_details(

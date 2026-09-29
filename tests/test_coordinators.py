@@ -310,3 +310,61 @@ async def test_blue_home_coordinator_update_data_raises_update_failed_on_429_wit
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+async def test_guard_total_value_does_not_fabricate_zero_on_error(hass):
+    """A failed aggregate fetch must not be reported as 0.0 water consumption.
+
+    Regression test. _get_total_value() used to swallow generic errors and return
+    0.0. That is not a harmless placeholder: _get_data() recomputes the cumulative
+    self._total_value from this call once a day, so a single failed fetch collapsed
+    the running total to zero and kept it there until the next successful daily
+    recompute. In production the 'total' sensor alternated between real readings and
+    0.0, which also corrupts long-term statistics.
+    """
+    from datetime import datetime
+
+    from grohe.enum.grohe_enum import GroheGroupBy
+
+    api = MagicMock()
+    api.get_appliance_data = AsyncMock(side_effect=TimeoutError())
+
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+
+    now = datetime.now().astimezone()
+    with pytest.raises(TimeoutError):
+        await coordinator._get_total_value(now, now, GroheGroupBy.DAY)
+
+
+async def test_guard_total_value_keeps_running_total_when_fetch_fails(hass):
+    """The cumulative total must survive a failed fetch untouched."""
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        return_value={"installation_date": "2020-01-01T00:00:00+00:00", "status": []}
+    )
+    api.get_appliance_data = AsyncMock(side_effect=TimeoutError())
+
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+    coordinator._total_value = 133984.0
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert coordinator._total_value == 133984.0, (
+        "a failed fetch must not reset the running total"
+    )
+
+
+async def test_guard_total_value_returns_zero_when_api_reports_no_withdrawals(hass):
+    """An empty result is a real zero and must still be reported as such."""
+    from datetime import datetime
+
+    from grohe.enum.grohe_enum import GroheGroupBy
+
+    api = MagicMock()
+    api.get_appliance_data = AsyncMock(return_value={"data": {"withdrawals": []}})
+
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+
+    now = datetime.now().astimezone()
+    assert await coordinator._get_total_value(now, now, GroheGroupBy.DAY) == 0
