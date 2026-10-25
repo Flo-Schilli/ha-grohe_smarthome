@@ -4,11 +4,14 @@ from datetime import datetime, timedelta
 
 from grohe import GroheClient, GroheForbiddenError, GroheUnauthorizedError
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.dto.notification_dto import Notification
+from custom_components.grohe_smarthome.entities.coordinator.relogin import (
+    fetch_with_relogin,
+)
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
     CoordinatorInterface,
 )
@@ -61,7 +64,7 @@ class SenseCoordinator(DataUpdateCoordinator, CoordinatorInterface):
             _LOGGER.debug(
                 f"Updating device data for device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})"
             )
-            data = await self._get_data()
+            data = await fetch_with_relogin(self._api, self._get_data)
 
             if self._log_response_data:
                 _LOGGER.debug(
@@ -97,7 +100,23 @@ class SenseCoordinator(DataUpdateCoordinator, CoordinatorInterface):
         # it and reuse the result, instead of each racing in with "self.data is None".
         async with self._initial_value_lock:
             if self.data is None:
-                self.data = await self._get_data()
+                try:
+                    self.data = await fetch_with_relogin(self._api, self._get_data)
+                except GroheUnauthorizedError as e:
+                    raise ConfigEntryAuthFailed(str(e)) from e
+                except GroheForbiddenError as e:
+                    _LOGGER.warning(
+                        "Grohe denied the initial request for %s (%s), will retry: %s",
+                        self._device.name,
+                        self._device.appliance_id,
+                        e,
+                    )
+                    raise ConfigEntryNotReady(str(e)) from e
+                except Exception as e:
+                    _LOGGER.error("Error fetching initial Grohe Sense data: %s", str(e))
+                    raise ConfigEntryNotReady(
+                        f"Error fetching initial Grohe Sense data: {e}"
+                    ) from e
             return self.data
 
     def set_polling_interval(self, polling: int) -> None:
