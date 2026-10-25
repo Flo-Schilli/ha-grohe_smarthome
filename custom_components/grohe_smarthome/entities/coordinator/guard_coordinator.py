@@ -12,6 +12,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from custom_components.grohe_smarthome.dto.config_dtos import DeviceConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.dto.notification_dto import Notification
+from custom_components.grohe_smarthome.entities.coordinator.relogin import (
+    fetch_with_relogin,
+)
 from custom_components.grohe_smarthome.entities.interface.coordinator_button_interface import (
     CoordinatorButtonInterface,
 )
@@ -288,7 +291,7 @@ class GuardCoordinator(
             _LOGGER.debug(
                 f"Updating device data for device {self._device.type} with name {self._device.name} (appliance = {self._device.appliance_id})"
             )
-            data = await self._get_data()
+            data = await fetch_with_relogin(self._api, self._get_data)
 
             if self._log_response_data:
                 _LOGGER.debug(
@@ -327,7 +330,7 @@ class GuardCoordinator(
         async with self._initial_value_lock:
             if self.data is None:
                 try:
-                    self.data = await self._get_data()
+                    self.data = await fetch_with_relogin(self._api, self._get_data)
                 except GroheUnauthorizedError as e:
                     raise ConfigEntryAuthFailed(str(e)) from e
                 except GroheForbiddenError as e:

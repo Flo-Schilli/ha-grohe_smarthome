@@ -7,6 +7,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from custom_components.grohe_smarthome.entities.coordinator.relogin import (
+    fetch_with_relogin,
+)
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
     CoordinatorInterface,
 )
@@ -52,7 +55,7 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
     async def _async_update_data(self) -> dict:
         try:
             _LOGGER.debug(f"Updating generic profile data for domain {self._domain}")
-            data = await self._get_data()
+            data = await fetch_with_relogin(self._api, self._get_data)
 
             if self._log_response_data:
                 _LOGGER.debug(f"Response data for Profile: {data}")
@@ -89,7 +92,7 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
         async with self._initial_value_lock:
             if self.data is None:
                 try:
-                    self.data = await self._get_data()
+                    self.data = await fetch_with_relogin(self._api, self._get_data)
                 except GroheUnauthorizedError as e:
                     raise ConfigEntryAuthFailed(str(e)) from e
                 except GroheForbiddenError as e:
