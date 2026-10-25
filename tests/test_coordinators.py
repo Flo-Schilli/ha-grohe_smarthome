@@ -313,16 +313,8 @@ async def test_blue_home_coordinator_update_data_raises_update_failed_on_429_wit
 
 
 async def test_guard_total_value_does_not_fabricate_zero_on_error(hass):
-    """A failed aggregate fetch must not be reported as 0.0 water consumption.
-
-    Regression test. _get_total_value() used to swallow generic errors and return
-    0.0. That is not a harmless placeholder: _get_data() recomputes the cumulative
-    self._total_value from this call once a day, so a single failed fetch collapsed
-    the running total to zero and kept it there until the next successful daily
-    recompute. In production the 'total' sensor alternated between real readings and
-    0.0, which also corrupts long-term statistics.
-    """
-    from datetime import datetime
+    """A failed aggregate fetch must not be reported as 0.0 water consumption."""
+    from datetime import date
 
     from grohe.enum.grohe_enum import GroheGroupBy
 
@@ -331,28 +323,106 @@ async def test_guard_total_value_does_not_fabricate_zero_on_error(hass):
 
     coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
 
-    now = datetime.now().astimezone()
     with pytest.raises(TimeoutError):
-        await coordinator._get_total_value(now, now, GroheGroupBy.DAY)
+        await coordinator._get_total_value(date.today(), date.today(), GroheGroupBy.DAY)
 
 
-async def test_guard_total_value_keeps_running_total_when_fetch_fails(hass):
-    """The cumulative total must survive a failed fetch untouched."""
+async def test_guard_total_value_does_not_turn_a_missing_response_into_zero(hass):
+    """The grohe library returns None for e.g. a 504 instead of raising."""
+    from datetime import date
+
+    from grohe.enum.grohe_enum import GroheGroupBy
+
     api = MagicMock()
-    api.get_appliance_details = AsyncMock(
-        return_value={"installation_date": "2020-01-01T00:00:00+00:00", "status": []}
-    )
-    api.get_appliance_data = AsyncMock(side_effect=TimeoutError())
+    api.get_appliance_data = AsyncMock(return_value=None)
 
     coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
-    coordinator._total_value = 133984.0
 
     with pytest.raises(UpdateFailed):
-        await coordinator._async_update_data()
+        await coordinator._get_total_value(date.today(), date.today(), GroheGroupBy.DAY)
 
-    assert coordinator._total_value == 133984.0, (
-        "a failed fetch must not reset the running total"
+
+def _guard_api_with_failing_consumption(error: Exception) -> MagicMock:
+    api = MagicMock()
+    api.get_appliance_details = AsyncMock(
+        return_value={
+            "installation_date": "2020-01-01T00:00:00+00:00",
+            "status": [],
+            "command": {"valve_open": True},
+        }
     )
+    api.get_appliance_data = AsyncMock(side_effect=error)
+    return api
+
+
+async def test_guard_consumption_failure_keeps_last_total_and_device_data(
+    hass, hass_storage
+):
+    """A failing consumption fetch must neither reset the total nor fail the update.
+
+    The valve and the other entities read the same coordinator data, so failing the
+    whole update for a slow statistics endpoint would make them unavailable too.
+    """
+    api = _guard_api_with_failing_consumption(TimeoutError())
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+    coordinator.data = {"total_water_consumption": 133984.0}
+
+    data = await coordinator._async_update_data()
+
+    assert data["total_water_consumption"] == 133984.0
+    assert data["details"]["command"] == {"valve_open": True}
+
+
+async def test_guard_consumption_failure_without_history_reports_no_total(
+    hass, hass_storage
+):
+    api = _guard_api_with_failing_consumption(TimeoutError())
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+
+    data = await coordinator._async_update_data()
+
+    assert data["total_water_consumption"] is None
+    assert data["details"]["command"] == {"valve_open": True}
+
+
+async def test_guard_consumption_rate_limit_keeps_last_known_data(hass, hass_storage):
+    """429s in the consumption part still go through the 'keep last data' path."""
+    api = _guard_api_with_failing_consumption(GroheForbiddenError("explicit deny"))
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+    last_data = {"details": {}, "total_water_consumption": 1.0}
+    coordinator.data = last_data
+
+    assert await coordinator._async_update_data() is last_data
+
+
+async def test_guard_reports_stored_total_plus_today(hass, hass_storage):
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+
+    yesterday = dt_util.now().date() - timedelta(days=1)
+    key = f"{DOMAIN}_guard_water_consumption_appliance-1"
+    hass_storage[key] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": key,
+        "data": {
+            "base_total": 1000.0,
+            "base_until": (yesterday.replace(day=1) - timedelta(days=1)).isoformat(),
+            "months": {f"{yesterday:%Y-%m}": 25.5},
+            "synced_until": yesterday.isoformat(),
+        },
+    }
+    api = _guard_api_with_failing_consumption(None)
+    api.get_appliance_data = AsyncMock(
+        return_value={"data": {"withdrawals": [{"waterconsumption": 4.5}]}}
+    )
+    coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
+
+    data = await coordinator._async_update_data()
+
+    assert data["total_water_consumption"] == 1030.0
+    assert api.get_appliance_data.call_count == 1, "only today's value is fetched"
 
 
 async def test_guard_total_value_returns_zero_when_api_reports_no_withdrawals(hass):
@@ -366,5 +436,5 @@ async def test_guard_total_value_returns_zero_when_api_reports_no_withdrawals(ha
 
     coordinator = GuardCoordinator(hass, DOMAIN, _make_device(), api)
 
-    now = datetime.now().astimezone()
+    now = datetime.now().astimezone().date()
     assert await coordinator._get_total_value(now, now, GroheGroupBy.DAY) == 0

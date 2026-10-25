@@ -91,3 +91,22 @@ def test_todo_entity_uses_has_entity_name():
 
     assert entity.has_entity_name is True
     assert entity.name == "Notifications"
+
+
+def test_accumulated_water_sensor_is_unknown_without_a_total():
+    from custom_components.grohe_smarthome.dto.config_dtos import ConfigSpecialType
+
+    entity = Sensor(
+        "grohe_smarthome",
+        MagicMock(),
+        _device(),
+        SensorDto(
+            name="Accumulated water",
+            keypath="details.consumption",
+            special_type=ConfigSpecialType.ACCUMULATED_WATER,
+        ),
+        MagicMock(),
+        {"details": {"consumption": 3.0}, "total_water_consumption": None},
+    )
+
+    assert entity.native_value is None

@@ -7,6 +7,7 @@ import httpx
 from grohe import GroheClient, GroheNetworkError, GroheTypes, GroheUnauthorizedError
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import httpx_client
 from homeassistant.helpers.device_registry import DeviceEntry
 from homeassistant.helpers.typing import ConfigType
@@ -31,6 +32,9 @@ from custom_components.grohe_smarthome.entities.coordinator import (
     ProfileCoordinator,
     SenseCoordinator,
 )
+from custom_components.grohe_smarthome.entities.coordinator.water_consumption_tracker import (
+    async_remove_water_consumption_store,
+)
 from custom_components.grohe_smarthome.entities.entity_helper import EntityHelper
 from custom_components.grohe_smarthome.entities.interface.coordinator_interface import (
     CoordinatorInterface,
@@ -52,6 +56,17 @@ async def async_unload_entry(ha: HomeAssistant, entry: GroheConfigEntry) -> bool
 
     _LOGGER.debug("Unloading Grohe Entry")
     return await ha.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(ha: HomeAssistant, entry: GroheConfigEntry) -> None:
+    """Delete the stored water consumption of the entry's devices."""
+    device_registry = dr.async_get(ha)
+    for device_entry in dr.async_entries_for_config_entry(
+        device_registry, entry.entry_id
+    ):
+        for domain, appliance_id in device_entry.identifiers:
+            if domain == DOMAIN:
+                await async_remove_water_consumption_store(ha, DOMAIN, appliance_id)
 
 
 async def async_setup_entry(ha: HomeAssistant, entry: GroheConfigEntry) -> bool:
@@ -221,6 +236,11 @@ async def async_remove_config_entry_device(
             if any(device.appliance_id in t for t in device_entry.identifiers):
                 device_found = True
                 _LOGGER.debug("Removing device %s", device.appliance_id)
+                coordinator = config_entry.runtime_data.coordinator.get(
+                    device.appliance_id
+                )
+                if isinstance(coordinator, GuardCoordinator):
+                    await coordinator.async_remove_stored_data()
 
         devices[:] = [
             device

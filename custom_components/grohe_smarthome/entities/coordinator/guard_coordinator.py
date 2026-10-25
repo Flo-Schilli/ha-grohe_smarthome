@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from benedict import benedict
 from grohe import GroheClient, GroheForbiddenError, GroheUnauthorizedError
@@ -8,12 +8,16 @@ from grohe.enum.grohe_enum import GroheGroupBy
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from custom_components.grohe_smarthome.dto.config_dtos import DeviceConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.dto.notification_dto import Notification
 from custom_components.grohe_smarthome.entities.coordinator.relogin import (
     fetch_with_relogin,
+)
+from custom_components.grohe_smarthome.entities.coordinator.water_consumption_tracker import (
+    WaterConsumptionTracker,
 )
 from custom_components.grohe_smarthome.entities.interface.coordinator_button_interface import (
     CoordinatorButtonInterface,
@@ -30,9 +34,9 @@ from custom_components.grohe_smarthome.entities.interface.coordinator_valve_inte
 
 _LOGGER = logging.getLogger(__name__)
 
-# The historical total-consumption query spans from install date to now (years, for an
-# older installation) and has been observed to occasionally exceed the default request
-# timeout. It's queried once a day at most, so a longer timeout here is cheap.
+# Aggregated-data queries over long ranges (a year of history, for the initial fetch of
+# the lifetime total) have been observed to exceed the default request timeout. They run
+# rarely, so a longer timeout here is cheap.
 HISTORICAL_TOTAL_VALUE_TIMEOUT = 30.0
 
 
@@ -63,8 +67,9 @@ class GuardCoordinator(
         self._api = api
         self._domain = domain
         self._device = device
-        self._total_value = 0
-        self._total_value_update_day: datetime | None = None
+        self._consumption = WaterConsumptionTracker(
+            hass, domain, device.appliance_id, self._get_historical_total_value
+        )
         self._timezone = datetime.now().astimezone().tzinfo
         self._last_update = datetime.now().astimezone().replace(tzinfo=self._timezone)
         self._notifications: list[Notification] = []
@@ -84,61 +89,96 @@ class GuardCoordinator(
 
     async def _get_total_value(
         self,
-        date_from: datetime,
-        date_to: datetime,
+        date_from: date,
+        date_to: date,
         group_by: GroheGroupBy,
         request_timeout: float | None = None,
     ) -> float:
+        """Summed water consumption of the full days from date_from to date_to."""
+        _LOGGER.debug(
+            f"Getting total values for Grohe Sense Guard with appliance id {self._device.appliance_id}"
+        )
+        data_in = await self._api.get_appliance_data(
+            self._device.location_id,
+            self._device.room_id,
+            self._device.appliance_id,
+            datetime.combine(date_from, time()),
+            datetime.combine(date_to, time()),
+            group_by,
+            True,
+            timeout=request_timeout,
+        )
+        if data_in is None:
+            # The grohe library returns None instead of raising for unexpected status
+            # codes (e.g. a 504 gateway timeout). That is not "no consumption".
+            raise UpdateFailed(
+                f"Grohe returned no aggregated data for {self._device.appliance_id}"
+            )
+
+        data = benedict(data_in)
+        _LOGGER.debug(
+            f"Got total values for Grohe Sense Guard for appliance with name {self._device.name}: {data}"
+        )
+
+        withdrawals = data.get("data.withdrawals")
+        if withdrawals is not None and isinstance(withdrawals, list):
+            # Handle None values in waterconsumption
+            return sum(val.get("waterconsumption") or 0 for val in withdrawals)
+
+        return 0.0
+
+    async def _get_historical_total_value(
+        self, date_from: date, date_to: date, group_by: GroheGroupBy
+    ) -> float:
+        return await self._get_total_value(
+            date_from,
+            date_to,
+            group_by,
+            request_timeout=HISTORICAL_TOTAL_VALUE_TIMEOUT,
+        )
+
+    async def _get_total_water_consumption(
+        self, api_data: dict[str, any]
+    ) -> float | None:
+        """Lifetime consumption including today, or the last known value on failure.
+
+        A failure here must only affect the consumption sensors, not the valve and the
+        other entities of the Guard, so it is not raised. Auth and rate-limit errors are
+        the exception: _async_update_data relogs in, starts reauth or keeps the last
+        known data for those.
+        """
+        today = dt_util.now().date()
         try:
-            _LOGGER.debug(
-                f"Getting total values for Grohe Sense Guard with appliance id {self._device.appliance_id}"
+            install_date = datetime.fromisoformat(api_data["installation_date"]).date()
+            await self._consumption.async_sync(install_date)
+            today_water_consumption = await self._get_total_value(
+                today, today, GroheGroupBy.DAY
             )
-            data_in = await self._api.get_appliance_data(
-                self._device.location_id,
-                self._device.room_id,
-                self._device.appliance_id,
-                date_from,
-                date_to,
-                group_by,
-                True,
-                timeout=request_timeout,
-            )
-
-            data = benedict(data_in)
-            _LOGGER.debug(
-                f"Got total values for Grohe Sense Guard for appliance with name {self._device.name}: {data}"
-            )
-
-            withdrawals = data.get("data.withdrawals")
-            if withdrawals is not None and isinstance(withdrawals, list):
-                # Handle None values in waterconsumption
-                return sum([val.get("waterconsumption", 0) for val in withdrawals])
-
-            else:
-                return 0.0
-
         except (GroheUnauthorizedError, GroheForbiddenError):
-            # Let auth/rate-limit errors propagate to _async_update_data, which knows how
-            # to react properly (reauth, or keep last known data) - swallowing them here
-            # would silently report 0.0 water consumption instead.
             raise
-
         except Exception as e:
-            # str(e) is empty for some exceptions (e.g. asyncio.TimeoutError), which
-            # otherwise leaves this log line looking blank and useless for diagnosis.
-            _LOGGER.error(f"Failed to get total values: {type(e).__name__}: {e}")
-            # Propagate instead of reporting 0.0, for the same reason the auth errors
-            # above do. A fabricated zero is not a harmless placeholder here: the daily
-            # branch in _get_data() recomputes self._total_value from this call, so one
-            # failed fetch collapsed the cumulative total to zero and left it there until
-            # the next successful daily recompute. The production signature is a daily
-            # counter dropping to zero and back within one polling interval, which no real
-            # counter can do -- 400.8 -> 0.0 -> 400.8 -> 0.0 -> 400.8 inside an hour, and
-            # the same again on another day around 113.6. That also corrupts long-term
-            # statistics. Letting it through costs one update cycle marked unavailable,
-            # which is the honest answer, and leaves _total_value untouched so the next
-            # cycle retries.
-            raise
+            last_known = (self.data or {}).get("total_water_consumption")
+            # str(e) is empty for some exceptions (e.g. TimeoutError).
+            _LOGGER.warning(
+                "Could not update the water consumption of %s, keeping %s: %s: %s",
+                self._device.appliance_id,
+                last_known,
+                type(e).__name__,
+                e,
+            )
+            return last_known
+
+        total_till_yesterday = self._consumption.total_until(today - timedelta(days=1))
+        total = round(total_till_yesterday + today_water_consumption, 2)
+
+        latest_data = api_data.get("data_latest") or {}
+        _LOGGER.debug(
+            f"Todays water consumption from appliance data: {today_water_consumption}. Absolute difference to daily_consumption is: {round(abs(today_water_consumption - latest_data.get('daily_consumption', 0)), 2)}"
+        )
+        _LOGGER.info(
+            f"Water consumption for {self._device.appliance_id}: TOTAL TILL YESTERDAY - {total_till_yesterday}l, TOTAL NOW - {total}l, TODAY - {today_water_consumption}l"
+        )
+        return total
 
     async def _get_data(self) -> dict[str, any]:
         api_data = await self._api.get_appliance_details(
@@ -154,44 +194,7 @@ class GuardCoordinator(
                 self._device.appliance_id,
             )
 
-        today_water_consumption = await self._get_total_value(
-            datetime.now().astimezone(), datetime.now().astimezone(), GroheGroupBy.DAY
-        )
-        if (
-            self._total_value_update_day is not None
-            and datetime.now().astimezone().day - self._total_value_update_day.day >= 1
-        ) or (self._total_value_update_day is None):
-            install_date = datetime.fromisoformat(api_data["installation_date"])
-            date_from = install_date
-            date_to = datetime.now().astimezone()
-            group_by = GroheGroupBy.YEAR
-
-            _LOGGER.debug(f"Old total water consumption: {self._total_value}")
-            self._total_value = max(
-                round(
-                    await self._get_total_value(
-                        date_from,
-                        date_to,
-                        group_by,
-                        request_timeout=HISTORICAL_TOTAL_VALUE_TIMEOUT,
-                    ),
-                    2,
-                )
-                - today_water_consumption,
-                0,
-            )
-            _LOGGER.debug(f"New total water consumption: {self._total_value}")
-            self._total_value_update_day = (
-                datetime.now().astimezone().replace(tzinfo=self._timezone)
-            )
-
-        latest_data = api_data.get("data_latest") or {}
-        _LOGGER.debug(
-            f"Todays water consumption from appliance data: {today_water_consumption}. Absolute difference to daily_consumption is: {round(abs(today_water_consumption - latest_data.get('daily_consumption', 0)), 2)}"
-        )
-        _LOGGER.info(
-            f"Water consumption for {self._device.appliance_id}: TOTAL TILL YESTERDAY - {round(self._total_value, 2)}l, TOTAL NOW - {round(self._total_value + today_water_consumption, 2)}l, TODAY - {today_water_consumption}l"
-        )
+        total_water_consumption = await self._get_total_water_consumption(api_data)
 
         try:
             status = {val["type"]: val["value"] for val in api_data["status"]}
@@ -203,7 +206,7 @@ class GuardCoordinator(
             "details": api_data,
             "status": status,
             "pressure": pressure,
-            "total_water_consumption": self._total_value + today_water_consumption,
+            "total_water_consumption": total_water_consumption,
         }
 
         return data
@@ -349,6 +352,9 @@ class GuardCoordinator(
                         f"Error fetching initial Grohe Sense Guard data: {e}"
                     ) from e
             return self.data
+
+    async def async_remove_stored_data(self) -> None:
+        await self._consumption.async_remove()
 
     def set_polling_interval(self, polling: int) -> None:
         self.update_interval = timedelta(seconds=polling)

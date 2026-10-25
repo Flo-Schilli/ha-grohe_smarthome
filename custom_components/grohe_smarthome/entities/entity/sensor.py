@@ -188,7 +188,8 @@ class Sensor(CoordinatorEntity, SensorEntity):
                     self._sensor.special_type == ConfigSpecialType.ACCUMULATED_WATER
                     and value is not None
                 ):
-                    value = value + data.get("total_water_consumption")
+                    total = data.get("total_water_consumption")
+                    value = None if total is None else value + total
                 elif (
                     self._sensor.special_type
                     == ConfigSpecialType.FILTER_REMAINING_ADJUSTED
