@@ -13,6 +13,9 @@ from homeassistant.util import dt as dt_util
 from custom_components.grohe_smarthome.dto.config_dtos import DeviceConfigDto
 from custom_components.grohe_smarthome.dto.grohe_device import GroheDevice
 from custom_components.grohe_smarthome.dto.notification_dto import Notification
+from custom_components.grohe_smarthome.entities.coordinator.deny_streak import (
+    DenyStreakLog,
+)
 from custom_components.grohe_smarthome.entities.coordinator.relogin import (
     fetch_with_relogin,
 )
@@ -76,6 +79,9 @@ class GuardCoordinator(
         self._log_response_data = log_response_data
         self._has_pressure_measurement = False
         self._initial_value_lock = asyncio.Lock()
+        self._deny_streak = DenyStreakLog(
+            _LOGGER, f"{device.name} ({device.appliance_id})"
+        )
 
         if (
             device_config is not None
@@ -304,18 +310,14 @@ class GuardCoordinator(
             self._last_update = (
                 datetime.now().astimezone().replace(tzinfo=self._timezone)
             )
+            self._deny_streak.accepted()
             return data
 
         except GroheUnauthorizedError as e:
             raise ConfigEntryAuthFailed(str(e)) from e
 
         except GroheForbiddenError as e:
-            _LOGGER.warning(
-                "Grohe denied the request for %s (%s), keeping last known data: %s",
-                self._device.name,
-                self._device.appliance_id,
-                e,
-            )
+            self._deny_streak.denied(e)
             if self.data is not None:
                 return self.data
             raise UpdateFailed(str(e)) from e
