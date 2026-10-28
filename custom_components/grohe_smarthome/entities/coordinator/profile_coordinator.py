@@ -7,6 +7,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from custom_components.grohe_smarthome.entities.coordinator.deny_streak import (
+    DenyStreakLog,
+)
 from custom_components.grohe_smarthome.entities.coordinator.relogin import (
     fetch_with_relogin,
 )
@@ -41,6 +44,7 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
         self._data: dict[str, any] = {}
         self._log_response_data = log_response_data
         self._initial_value_lock = asyncio.Lock()
+        self._deny_streak = DenyStreakLog(_LOGGER, f"domain {domain}")
 
     async def _get_data(self) -> dict[str, any]:
         api_data = await self._api.get_profile_notifications(50)
@@ -63,17 +67,14 @@ class ProfileCoordinator(DataUpdateCoordinator, CoordinatorInterface):
             self._last_update = (
                 datetime.now().astimezone().replace(tzinfo=self._timezone)
             )
+            self._deny_streak.accepted()
             return data
 
         except GroheUnauthorizedError as e:
             raise ConfigEntryAuthFailed(str(e)) from e
 
         except GroheForbiddenError as e:
-            _LOGGER.warning(
-                "Grohe denied the request for domain %s, keeping last known data: %s",
-                self._domain,
-                e,
-            )
+            self._deny_streak.denied(e)
             if self.data is not None:
                 return self.data
             raise UpdateFailed(str(e)) from e
