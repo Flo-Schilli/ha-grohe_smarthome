@@ -23,7 +23,6 @@ DATA_SCHEMA = vol.Schema(
 
 class GroheSenseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     async def _async_validate_login(self, username: str, password: str) -> str | None:
         """Try to log in to the Grohe backend. Returns an error code, or None on success."""
