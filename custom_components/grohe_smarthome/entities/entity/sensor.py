@@ -138,7 +138,18 @@ class Sensor(CoordinatorEntity, SensorEntity):
                     and self._sensor.special_type
                     == ConfigSpecialType.DURATION_AS_TIMESTAMP
                 ):
-                    value = datetime.now().astimezone() - timedelta(minutes=value)
+                    # The duration belongs to this measurement. Using the poll
+                    # time moves the event forward when cached data is reused.
+                    timestamp = data.get("details.data_latest.measurement.timestamp")
+                    if not isinstance(timestamp, str):
+                        return None
+                    try:
+                        measured_at = datetime.fromisoformat(timestamp)
+                    except ValueError:
+                        return None
+                    if measured_at.tzinfo is None:
+                        return None
+                    value = measured_at - timedelta(minutes=value)
                 else:
                     value = datetime.fromisoformat(value)
 
