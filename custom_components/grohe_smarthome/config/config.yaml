@@ -336,6 +336,27 @@ devices:
           category: 'Diagnostic'
           device_class: 'Connectivity'
           enabled: true
+        - name: 'CO2 low'
+          keypath: 'details.state.co2_20l_reached'
+          device_class: 'Problem'
+        - name: 'CO2 empty'
+          keypath: 'details.state.co2_empty'
+          device_class: 'Problem'
+        - name: 'Filter low'
+          keypath: 'details.state.filter_20l_reached'
+          device_class: 'Problem'
+        - name: 'Filter exhausted'
+          keypath: 'details.state.filter_empty'
+          device_class: 'Problem'
+        - name: 'Cleaning required'
+          keypath: 'details.state.cleaning_needed'
+          device_class: 'Problem'
+        - name: 'Cleaning active'
+          keypath: 'details.state.cleaning_mode_active'
+          device_class: 'Running'
+        - name: 'Flush confirmation required'
+          keypath: 'details.state.flush_confirmation_required'
+          device_class: 'Problem'
 
 
     - type: GroheBlueProf

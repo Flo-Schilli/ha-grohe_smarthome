@@ -20,6 +20,15 @@ If you're new, take a look at the Installation Guide here: [Getting Started](htt
 
 Other documentation for available actions, device sensors, notifications, etc. can be found in the [wiki](https://github.com/Flo-Schilli/ha-grohe_smarthome/wiki)
 
+### Blue Home maintenance status
+
+Blue Home exposes binary sensors for **CO2 low**, **CO2 empty**, **Filter low**,
+**Filter exhausted**, **Cleaning required**, **Cleaning active**, and
+**Flush confirmation required**. These reflect the flags reported by Grohe, so they
+can be used for maintenance reminders and automations without calculating thresholds
+from the remaining percentages. They use the existing cloud polling and do not add
+API requests. A flag missing from the API response is shown as unknown.
+
 ## Remarks on the "API"
 I have not seen any documentation from Grohe on the API this integration is using, so likely it was only intended for their app.
 Breaking changes have happened previously, and can easily happen again.

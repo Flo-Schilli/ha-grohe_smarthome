@@ -116,3 +116,5 @@ class BinarySensor(CoordinatorEntity, BinarySensorEntity):
             # We do have some data here, so let's extract it
             value = self._get_value(self._coordinator.data)
             self._value = value
+
+        super()._handle_coordinator_update()
