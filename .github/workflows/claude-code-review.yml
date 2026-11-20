@@ -41,7 +41,6 @@ jobs:
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
-          show_full_output: true
 
       - name: Label entfernen
         if: always() && github.event_name == 'pull_request_target'
